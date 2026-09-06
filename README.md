@@ -7,7 +7,7 @@ then install games, transfer media, browse the console's storage, pull
 saves/photos/videos back to your PC, and install themes — no account, no
 cloud, no internet connection required for anything the app does.
 
-> [Screenshot: Link screen, disconnected, showing the Wi-Fi/USB mode toggle]
+![Link screen, disconnected, showing the Wi-Fi/USB mode toggle](docs/images/link.png)
 
 ---
 
@@ -116,7 +116,7 @@ theme's real name and its own preview art before you press Start, and tells
 you which tool to use to finish once the transfer is done. The app never
 switches your active skin for you; that choice stays yours.
 
-> [Screenshot: Install screen with a staged theme, name and preview art visible]
+![Install screen with a staged theme, name and preview art visible](docs/images/install.png)
 
 ### Browsing the console
 
@@ -128,7 +128,7 @@ one. Multi-select works by click/ctrl-click/shift-click or by drag-select
 touch), and drag & drop works both within the remote tree and between the
 remote tree and your PC's own file explorer.
 
-> [Screenshot: Browse screen at the true root, showing multiple partitions]
+![Browse screen at the true root, showing multiple partitions](docs/images/browse.png)
 
 ### Downloading from the console
 
@@ -137,7 +137,7 @@ locations, select what you want (single files or whole folders, drag-select
 included), and download to a folder you choose on your PC. Folders come
 back whole, subfolders and all.
 
-> [Screenshot: Transfers screen with a batch download in progress]
+![Transfers screen with a batch download in progress](docs/images/transfers.png)
 
 ---
 
