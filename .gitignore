@@ -1,0 +1,74 @@
+# Build output
+build/
+build-*/
+android-build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+*.o
+*.obj
+
+# Release artifacts and portable bundles -- built by tools/, not source
+installer/
+dist/
+*.AppImage
+*.zip
+*.tar.gz
+*.exe
+
+# Manual/hardware testing -- the maintainer's own walkthrough and the
+# portable bundle it drives. Not part of the codebase.
+manual-testing/
+
+# Android client -- wired but unbuilt, deliberately out of version control
+android/
+
+# Local working context for AI assistants. Never committed.
+CLAUDE.md
+.claude/
+
+# Qt / CMake generated
+*.qmlc
+*.jsc
+.qtc_clangd/
+.moc/
+.rcc/
+.qt/
+
+# Editor / IDE
+.vscode/
+.idea/
+.cache/
+CMakeUserPresets.json
+CMakeLists.txt.user*
+*.user
+*.swp
+*.swo
+*~
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Local test/debug output that can capture a real device address or a real
+# home path. The placeholder addresses hardcoded in source and tests are
+# fine and stay -- this is about captured runtime data.
+*.log
+logs/
+*-session.txt
+*.pcap
+
+# Secrets -- nothing of the sort exists in this project, and this keeps it so
+.env
+.env.*
+*.pem
+*.key
+secrets.*
+credentials.*
+
+# Brand source sheet and derived art whose lettering still spells the old
+# product name. Kept locally; re-cut before adding any of it back.
+image.jpeg
+assets/logo/wordmark_1200.png
+assets/logo/cover_1920x1080.png
