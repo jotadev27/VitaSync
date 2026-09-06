@@ -3,6 +3,9 @@
 
 qt_add_executable(vitasync
     main.cpp
+    # Windows only: embeds the app icon in the .exe itself. MinGW compiles it
+    # with windres; every other platform ignores the file entirely.
+    $<$<BOOL:${WIN32}>:vitasync.rc>
 )
 
 # Must be marked before the module is declared, otherwise the qmldir entry is
@@ -15,6 +18,11 @@ set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # resolves to nothing at runtime.
 set_source_files_properties(../assets/logo/appicon_256.png
     PROPERTIES QT_RESOURCE_ALIAS brand/appicon.png)
+# The rail draws its mark at ~30px. The full shield averages into a smear at
+# that size, so the rail gets the knot medallion cut instead -- the same
+# split the .ico uses between its small and large frames.
+set_source_files_properties(../assets/logo/appicon_32.png
+    PROPERTIES QT_RESOURCE_ALIAS brand/mark.png)
 
 # This module keeps its .qml files in components/ and views/ rather than one
 # flat directory. Qt 6.9 added a policy for exactly that shape: NEW generates
@@ -54,6 +62,7 @@ qt_add_qml_module(vitasync
         qml/views/TransfersView.qml
     RESOURCES
         ../assets/logo/appicon_256.png
+        ../assets/logo/appicon_32.png
 )
 
 

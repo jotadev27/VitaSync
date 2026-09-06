@@ -19,6 +19,11 @@ Rectangle {
     width: Theme.railWidth
     color: Theme.surface
 
+    /// Every element in the rail starts on this line. The rail is wide enough
+    /// to name its destinations, so the content is laid out along a left edge
+    /// like a labelled panel, rather than floated in the middle of it.
+    readonly property int inset: Theme.space4
+
     Rectangle {
         anchors.right: parent.right
         width: Theme.border
@@ -28,31 +33,35 @@ Rectangle {
 
     Image {
         id: mark
-        source: "qrc:/qt/qml/VitaSync/Ui/brand/appicon.png"
-        width: 34
-        height: 34
-        anchors.horizontalCenter: parent.horizontalCenter
+        source: "qrc:/qt/qml/VitaSync/Ui/brand/mark.png"
+        width: 30
+        height: 30
+        anchors.left: parent.left
+        anchors.leftMargin: root.inset
         anchors.top: parent.top
-        anchors.topMargin: 15
+        anchors.topMargin: Theme.space4
         smooth: true
         mipmap: true
     }
 
     Rectangle {
+        id: markRule
         anchors.top: mark.bottom
-        anchors.topMargin: 15
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: 26
+        anchors.topMargin: Theme.space4
+        anchors.left: parent.left
+        anchors.leftMargin: root.inset
+        anchors.right: parent.right
+        anchors.rightMargin: root.inset
         height: Theme.border
         color: Theme.line
     }
 
     Column {
         id: items
-        anchors.top: mark.bottom
-        anchors.topMargin: 34
+        anchors.top: markRule.bottom
+        anchors.topMargin: Theme.space4
         width: parent.width
-        spacing: 4
+        spacing: Theme.space1
 
         Repeater {
             model: [
@@ -65,42 +74,52 @@ Rectangle {
             Item {
                 id: navItem
                 width: root.width
-                height: 54
+                height: 44
 
                 readonly property bool active: root.currentIndex === index
 
-                // Active state is an accent bar on the edge plus an accent
-                // mark -- no filled pill, no shadow.
+                // Active state is an accent edge plus accent ink -- no filled
+                // pill, no shadow. The edge is the same device the panels use.
                 Rectangle {
                     anchors.left: parent.left
                     width: 2
-                    height: parent.height - 16
-                    anchors.verticalCenter: parent.verticalCenter
+                    height: parent.height
                     color: Theme.blue
                     opacity: navItem.active ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: Theme.fast } }
                 }
 
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 5
+                Rectangle {
+                    anchors.fill: parent
+                    color: Theme.surfaceAlt
+                    opacity: navItem.active ? 1 : (hover.hovered ? 0.6 : 0)
+                    Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+                }
+
+                Row {
+                    anchors.left: parent.left
+                    anchors.leftMargin: root.inset
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Theme.space3
 
                     Icon {
-                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
                         name: modelData.icon
-                        size: 19
+                        size: 18
                         color: navItem.active ? Theme.blue
-                                              : (hover.hovered ? Theme.ink : Theme.inkFaint)
+                                              : (hover.hovered ? Theme.ink : Theme.inkMuted)
                         Behavior on color { ColorAnimation { duration: Theme.fast } }
                     }
 
                     Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
                         text: modelData.label
                         font.family: Theme.sansFamily
-                        font.pixelSize: Theme.sizeMicro
-                        font.letterSpacing: 0.5
-                        color: navItem.active ? Theme.blue : Theme.inkFaint
+                        font.pixelSize: Theme.sizeSmall
+                        font.weight: navItem.active ? Font.DemiBold : Font.Normal
+                        font.letterSpacing: 0.6
+                        color: navItem.active ? Theme.ink
+                                              : (hover.hovered ? Theme.ink : Theme.inkMuted)
                         Behavior on color { ColorAnimation { duration: Theme.fast } }
                     }
                 }
@@ -108,10 +127,9 @@ Rectangle {
                 // Normal work: a square counter.
                 Rectangle {
                     visible: modelData.badge > 0 && !(index === 3 && root.alertBadge > 0)
-                    anchors.top: parent.top
-                    anchors.topMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
                     anchors.right: parent.right
-                    anchors.rightMargin: 12
+                    anchors.rightMargin: root.inset
                     width: Math.max(15, badgeText.implicitWidth + 8)
                     height: 15
                     radius: 2
@@ -132,10 +150,9 @@ Rectangle {
                 // the counter at a glance and in greyscale.
                 Icon {
                     visible: index === 3 && root.alertBadge > 0
-                    anchors.top: parent.top
-                    anchors.topMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
                     anchors.right: parent.right
-                    anchors.rightMargin: 10
+                    anchors.rightMargin: root.inset
                     name: "alert"
                     size: 15
                     weight: 2.2
@@ -153,10 +170,10 @@ Rectangle {
         id: bulbButton
         anchors.bottom: parent.bottom
         anchors.left: parent.left
-        anchors.leftMargin: 14
-        anchors.bottomMargin: 14
-        width: 40
-        height: 40
+        anchors.leftMargin: root.inset
+        anchors.bottomMargin: Theme.space4
+        width: 34
+        height: 34
 
         Rectangle {
             anchors.fill: parent
@@ -183,13 +200,13 @@ Rectangle {
     // with anything the app is actually trying to say.
     Text {
         anchors.left: bulbButton.right
-        anchors.leftMargin: 8
+        anchors.leftMargin: Theme.space2
         anchors.verticalCenter: bulbButton.verticalCenter
         text: "Design by jotadev27"
         font.family: Theme.sansFamily
         font.pixelSize: Theme.sizeMicro
         color: Theme.inkFaint
         elide: Text.ElideRight
-        width: Math.max(0, root.width - bulbButton.x - bulbButton.width - 16 - 8)
+        width: Math.max(0, root.width - bulbButton.x - bulbButton.width - root.inset - Theme.space2)
     }
 }

@@ -1,0 +1,8 @@
+// Windows resource script: the icon Explorer, the taskbar and the shortcut
+// all read off the executable itself. Without it the .exe carries the
+// toolchain's default icon no matter what the installer displays.
+//
+// IDI_ICON1 is the conventional first-icon id: Windows shows the
+// lowest-numbered icon resource for the file, and Qt's own tooling expects
+// this name too.
+IDI_ICON1 ICON "../assets/logo/vitasync.ico"

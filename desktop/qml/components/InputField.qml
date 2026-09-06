@@ -12,26 +12,27 @@ Item {
     property string label: ""
     property string text: ""
     property string placeholder: ""
-    /// One short line under the field. A caption, not an explanation -- the
-    /// lightbulb is where anything longer belongs.
-    property string hint: ""
     property bool valid: true
     property bool showValidity: false
     property bool mono: true
     property int maximumLength: 255
     property var validator: null
     property alias inputMethodHints: field.inputMethodHints
-    /// The actual text box's bottom edge, not the component's -- a hint
-    /// caption extends below the box, so a sibling (a "Browse" button
-    /// anchored alongside a field) needs this, not `bottom`, to land level
-    /// with the box regardless of whether a hint is present or how long it is.
-    property alias controlBottom: box.bottom
+
+    /// Height of the label line above the box, or 0 when there is no label.
+    readonly property int labelInset: label.length > 0 ? Theme.labelHeight : 0
+    /// The text box's own top offset inside this component. A sibling that has
+    /// to sit level with the box -- a "Browse" button beside a field -- binds
+    /// its `y` to this. It is deliberately a number and not an anchor line:
+    /// the box is a child of this item, and QML silently ignores an anchor
+    /// aimed at anything that is not a sibling or a parent, which is exactly
+    /// how these buttons drifted a label's height too high for so long.
+    readonly property int controlY: labelInset
 
     signal accepted()
     signal edited(string value)
 
-    implicitHeight: (label.length > 0 ? 18 : 0) + Theme.controlHeight
-                    + (hint.length > 0 ? caption2.implicitHeight + 5 : 0)
+    implicitHeight: labelInset + Theme.controlHeight
     implicitWidth: 200
 
     Text {
@@ -46,22 +47,9 @@ Item {
         Behavior on color { ColorAnimation { duration: Theme.fast } }
     }
 
-    Text {
-        id: caption2
-        visible: root.hint.length > 0
-        anchors.bottom: parent.bottom
-        width: parent.width
-        text: root.hint
-        font.family: Theme.sansFamily
-        font.pixelSize: Theme.sizeMicro
-        color: Theme.inkFaint
-        elide: Text.ElideRight
-    }
-
     Rectangle {
         id: box
-        anchors.bottom: root.hint.length > 0 ? caption2.top : parent.bottom
-        anchors.bottomMargin: root.hint.length > 0 ? 5 : 0
+        y: root.labelInset
         width: parent.width
         height: Theme.controlHeight
         radius: Theme.radius

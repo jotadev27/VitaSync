@@ -84,7 +84,7 @@ Item {
             }
 
             AppButton {
-                anchors.bottom: hostField.controlBottom
+                y: hostField.controlY
                 text: Device.connected ? "Disconnect" : "Connect"
                 iconName: Device.connected ? "power" : "link"
                 variant: Device.connected ? "secondary" : "primary"
@@ -196,7 +196,7 @@ Item {
                 width: parent.width
                 visible: Device.usbCandidates.length === 0
                 iconName: "usb"
-                text: "No USB-connected Vita — plug in, pick USB in VitaShell, then Scan"
+                text: "No Vita found — pick USB in VitaShell, then Scan"
             }
 
             // Manual override for a volume the scan missed -- same pattern as
@@ -214,7 +214,7 @@ Item {
                 }
 
                 AppButton {
-                    anchors.bottom: usbField.controlBottom
+                    y: usbField.controlY
                     iconName: "folder"
                     text: "Browse"
                     onClicked: usbDialog.open()
@@ -302,13 +302,12 @@ Item {
                 width: 380
                 label: "COVER PACK FOLDER"
                 placeholder: "folder of TITLEID.png"
-                hint: "Optional. Box art for your games, named by Title ID."
                 text: Device.coverPackPathDisplay
                 onEdited: function (value) { Device.coverPackPath = value }
             }
 
             AppButton {
-                anchors.bottom: coverField.controlBottom
+                y: coverField.controlY
                 iconName: "folder"
                 text: "Browse"
                 onClicked: coverDialog.open()
@@ -323,13 +322,12 @@ Item {
                 width: 380
                 label: "DOWNLOAD FOLDER"
                 placeholder: "where files from the Vita land"
-                hint: "Where saves, photos and videos pulled off the Vita are put."
                 text: Device.downloadDirDisplay
                 onEdited: function (value) { Device.downloadDir = value }
             }
 
             AppButton {
-                anchors.bottom: downloadField.controlBottom
+                y: downloadField.controlY
                 iconName: "download"
                 text: "Browse"
                 onClicked: downloadDialog.open()

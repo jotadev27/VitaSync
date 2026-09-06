@@ -3,51 +3,74 @@ import QtQuick
 
 // The visual identity, in one file.
 //
-// Palette is white / black / green / blue / purple plus structural greys, and
-// the accents do real work: blue carries identity and navigation, green means
-// "this went through", purple flags anything that needs a second look. Nothing
-// is styled with a gradient wash or a drop shadow -- structure comes from
-// hairlines and flat planes, the way an instrument panel does.
+// The reference object is an instrument panel, not a dashboard: enamel on
+// steel, read at a glance, nothing glowing for its own sake. Palette is
+// white / black / green / blue / purple plus structural greys, and the
+// accents do real work -- blue carries identity and navigation, green means
+// "this went through", purple flags anything that needs a second look.
+// Structure comes from hairlines, plane changes and a single accent edge,
+// never from a gradient wash or a drop shadow.
 QtObject {
     id: theme
 
     // --- planes -----------------------------------------------------------
-    readonly property color base:       "#06090F"
-    readonly property color surface:    "#0C121C"
-    readonly property color surfaceAlt: "#111A28"
-    readonly property color raised:     "#162234"
-    readonly property color line:       "#1C2739"
-    readonly property color lineStrong: "#2B3E59"
+    // Two real tiers, not one fill repeated: `base` is the recessed ground the
+    // app sits in, `surface` is a panel raised out of it. A neutral graphite
+    // rather than a blue-black, so the blue accents read as blue instead of
+    // dissolving into the field behind them.
+    readonly property color base:       "#0C0E12"
+    readonly property color surface:    "#14171D"
+    readonly property color surfaceAlt: "#1A1E26"
+    readonly property color raised:     "#222833"
+    readonly property color line:       "#262C36"
+    readonly property color lineStrong: "#39424F"
 
     // --- ink --------------------------------------------------------------
-    // Deliberately not pure white: #E9EFF8 against #06090F reads as clean
+    // Deliberately not pure white: #E6EAF0 against #0C0E12 reads as clean
     // without the glare of #FFFFFF on black.
-    readonly property color ink:        "#E9EFF8"
-    readonly property color inkMuted:   "#8FA4C0"
-    readonly property color inkFaint:   "#5A6E8C"
+    readonly property color ink:        "#E6EAF0"
+    readonly property color inkMuted:   "#9AA5B4"
+    readonly property color inkFaint:   "#626D7C"
 
     // --- accents ----------------------------------------------------------
-    readonly property color blue:       "#2BB8F0"
-    readonly property color blueDim:    "#177FB0"
-    readonly property color blueWash:   "#0E2634"
-    readonly property color green:      "#3FD79B"
-    readonly property color greenDim:   "#1E8C63"
-    readonly property color greenWash:  "#0B2620"
-    readonly property color purple:     "#A874F7"
-    readonly property color purpleDim:  "#6E45AE"
-    readonly property color purpleWash: "#1B1330"
+    // Enamel, not LED. Each accent is pulled down in chroma so that only one
+    // thing on screen is ever the brightest thing on screen.
+    readonly property color blue:       "#4A90C8"
+    readonly property color blueDim:    "#2E5F86"
+    readonly property color blueWash:   "#121E28"
+    readonly property color green:      "#4A9E70"
+    readonly property color greenDim:   "#2C6547"
+    readonly property color greenWash:  "#101F18"
+    readonly property color purple:     "#8267B8"
+    readonly property color purpleDim:  "#55427A"
+    readonly property color purpleWash: "#171325"
 
     // --- metrics ----------------------------------------------------------
     // One control height everywhere. Fields, buttons, chips and list rows all
     // measure the same, which is what keeps the boxes visually even.
     readonly property int  controlHeight: 38
     readonly property int  rowHeight:     40
-    readonly property int  railWidth:     220
-    readonly property int  radius:        3
-    readonly property int  gap:           10
-    readonly property int  gapLarge:      18
-    readonly property int  pad:           14
+    readonly property int  railWidth:     200
+    /// The label line above a text box. Shared so a control beside a field can
+    /// offset itself by exactly the same amount the field does.
+    readonly property int  labelHeight:   18
+    // Controls get a small radius; large planes get none. A panel that is
+    // rounded on every corner reads as a card, which is the look this is not.
+    readonly property int  radius:        2
     readonly property int  border:        1
+
+    // --- spacing ----------------------------------------------------------
+    // A 4px scale rather than three ad-hoc numbers, so vertical rhythm is
+    // deliberate instead of accidental.
+    readonly property int  space1: 4
+    readonly property int  space2: 8
+    readonly property int  space3: 12
+    readonly property int  space4: 20
+    readonly property int  space5: 32
+
+    readonly property int  gap:      space2
+    readonly property int  gapLarge: space4
+    readonly property int  pad:      space3
 
     // --- type -------------------------------------------------------------
     // Sans for labels, mono for anything the machine produced: paths, Title
@@ -55,8 +78,8 @@ QtObject {
     readonly property string sansFamily: "Inter, Roboto, Segoe UI, DejaVu Sans, sans-serif"
     readonly property string monoFamily: "JetBrains Mono, Roboto Mono, DejaVu Sans Mono, Consolas, monospace"
 
-    readonly property int sizeDisplay: 21
-    readonly property int sizeTitle:   15
+    readonly property int sizeDisplay: 24
+    readonly property int sizeTitle:   16
     readonly property int sizeBody:    13
     readonly property int sizeSmall:   11
     readonly property int sizeMicro:   10

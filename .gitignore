@@ -67,8 +67,8 @@ logs/
 secrets.*
 credentials.*
 
-# Brand source sheet and derived art whose lettering still spells the old
-# product name. Kept locally; re-cut before adding any of it back.
+# Reference artwork the shipped icons are cut from, and the older brand
+# sheet. Never committed: the derived assets/logo/ set is what the project
+# actually uses, and these carry pre-rename lettering.
+logo.png
 image.jpeg
-assets/logo/wordmark_1200.png
-assets/logo/cover_1920x1080.png
