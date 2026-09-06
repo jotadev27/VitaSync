@@ -41,7 +41,7 @@ one at a time.
 Recent IP:port pairs you've connected to are remembered under **RECENT** for
 one-tap reconnecting; a **Clean** action appears once that list gets long.
 
-> [Screenshot: Link screen connected via Wi-Fi, device panel visible]
+![Link screen connected via Wi-Fi, device panel visible](docs/images/link-wifi.png)
 
 ### USB
 
@@ -137,7 +137,7 @@ locations, select what you want (single files or whole folders, drag-select
 included), and download to a folder you choose on your PC. Folders come
 back whole, subfolders and all.
 
-![Transfers screen with a batch download in progress](docs/images/transfers.png)
+![Transfers screen with two theme installs verified and awaiting confirmation on the Vita](docs/images/transfers.png)
 
 ---
 
