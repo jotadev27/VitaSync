@@ -28,25 +28,11 @@ Item {
         Behavior on color { ColorAnimation { duration: Theme.normal } }
     }
 
-    // A halo only while something is actually happening.
-    Rectangle {
-        id: halo
-        anchors.centerIn: core
-        width: root.size
-        height: root.size
-        radius: width / 2
-        color: "transparent"
-        border.width: 1
-        border.color: root.toneColor
-        visible: root.tone === "busy"
-
-        SequentialAnimation {
-            running: root.tone === "busy"
-            loops: Animation.Infinite
-            ParallelAnimation {
-                NumberAnimation { target: halo; property: "scale"; from: 1; to: 2.4; duration: 1100; easing.type: Easing.OutQuad }
-                NumberAnimation { target: halo; property: "opacity"; from: 0.8; to: 0; duration: 1100 }
-            }
-        }
+    SequentialAnimation {
+        running: root.tone === "busy" && root.visible
+        loops: Animation.Infinite
+        NumberAnimation { target: core; property: "opacity"; from: 1; to: 0.4; duration: 700 }
+        NumberAnimation { target: core; property: "opacity"; from: 0.4; to: 1; duration: 700 }
+        onStopped: core.opacity = 1
     }
 }

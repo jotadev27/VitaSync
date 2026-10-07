@@ -1,8 +1,7 @@
 import QtQuick
 import VitaSync.Ui
 
-// Progress, drawn as a segmented meter rather than a rounded pill so it reads
-// as instrumentation instead of a stock widget.
+// Continuous progress, with a moving band for work of unknown length.
 Item {
     id: root
 
@@ -14,27 +13,18 @@ Item {
     implicitHeight: 6
     implicitWidth: 200
 
-    Row {
+    Rectangle {
         anchors.fill: parent
-        spacing: 2
-
-        Repeater {
-            model: root.segments
-
-            Rectangle {
-                width: (root.width - (root.segments - 1) * 2) / root.segments
-                height: root.height
-                radius: 1
-
-                readonly property real threshold: (index + 1) / root.segments
-                readonly property bool lit: root.indeterminate
-                    ? false
-                    : root.value >= threshold - (1 / root.segments) * 0.5
-
-                color: lit ? root.accent : Theme.line
-                Behavior on color { ColorAnimation { duration: 90 } }
-            }
-        }
+        radius: height / 2
+        color: Theme.line
+    }
+    Rectangle {
+        visible: !root.indeterminate
+        width: root.width * Math.max(0, Math.min(1, root.value))
+        height: root.height
+        radius: height / 2
+        color: root.accent
+        Behavior on width { NumberAnimation { duration: Theme.fast } }
     }
 
     // Indeterminate work sweeps a short band instead of filling.

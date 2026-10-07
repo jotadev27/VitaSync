@@ -20,7 +20,7 @@ Item {
         id: tick
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
-        width: 2
+        width: 0
         height: parent.height - 4
         color: root.accent
     }
@@ -28,13 +28,12 @@ Item {
     Text {
         id: caption
         anchors.left: tick.right
-        anchors.leftMargin: Theme.space2
+        anchors.leftMargin: 0
         anchors.verticalCenter: parent.verticalCenter
         text: root.text
         font.family: Theme.sansFamily
-        font.pixelSize: Theme.sizeSmall
-        font.weight: Font.Bold
-        font.letterSpacing: 1.6
+        font.pixelSize: Theme.sizeBody
+        font.weight: Font.DemiBold
         color: Theme.ink
     }
 
@@ -54,7 +53,7 @@ Item {
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         text: root.trailing
-        font.family: Theme.monoFamily
+        font.family: Theme.sansFamily
         font.pixelSize: Theme.sizeMicro
         color: Theme.inkFaint
     }

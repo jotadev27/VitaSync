@@ -1,294 +1,207 @@
-# VitaSync
+<p align="center">
+  <img src="assets/logo/appicon_256.png" alt="VitaSync logo" width="128" height="128">
+</p>
+<h1 align="center">VitaSync</h1>
+<p align="center">Transfer files between your PC and PS Vita over FTP or USB.</p>
+<p align="center"><strong>Version 2.0 · Windows 10/11 (64-bit)</strong></p>
 
-**v1.0 — first stable release.**
+VitaSync is a desktop companion for a homebrew-enabled PS Vita running
+[VitaShell](https://github.com/TheOfficialFloW/VitaShell). Send games, media
+and themes, browse storage, and download files to your PC. It works locally,
+without an account or cloud service.
 
-A companion app for a jailbroken/enso'd PS Vita, over Wi-Fi or USB. Connect,
-then install games, transfer media, browse the console's storage, pull
-saves/photos/videos back to your PC, and install themes — no account, no
-cloud, no internet connection required for anything the app does.
+<p align="center">
+  <img src="docs/images/link.png" alt="VitaSync connection screen" width="960">
+</p>
 
-![Link screen, disconnected, showing the Wi-Fi/USB mode toggle](docs/images/link.png)
+## Download and run on Windows
 
----
+Get the Windows packages from [GitHub Releases](https://github.com/jotadev27/VitaSync/releases).
 
-## What you need
+- **Installer:** run `VitaSync-2.0-Windows-x64-Setup.exe`. It installs the app,
+  creates desktop and Start menu shortcuts, and provides an uninstaller.
+- **Portable:** extract `VitaSync-2.0-Windows-x64-Portable.zip` completely,
+  then open `VitaSync/vitasync.exe`. Keep the bundled libraries and folders
+  beside the executable. No Qt installation or PATH changes are needed.
+- **Checksums:** compare the file's SHA-256 with `SHA256SUMS.txt`.
 
-- A PS Vita running **[VitaShell](https://github.com/TheOfficialFloW/VitaShell)**
-  (any jailbroken/enso'd Vita has this). VitaShell is what exposes both
-  connection modes this app uses — there is nothing else to install on the
-  console.
-- Either the Vita and your PC on the **same Wi-Fi network**, or a **USB
-  cable** connecting the two.
-
----
-
-## Connecting
-
-VitaSync supports two connection modes. Pick one per session — they
-are alternatives, not simultaneous, the same way VitaShell itself only runs
-one at a time.
-
-### Wi-Fi (FTP)
-
-1. On the Vita, open VitaShell and press **SELECT**. This starts VitaShell's
-   built-in FTP server and shows an IP address and a port on screen.
-2. In VitaSync's **Link** screen, choose the **WI-FI** mode, type that
-   IP address and port in, and press **Connect**.
-3. Once connected, the panel below shows what the device reported (mount
-   points it exposes) so you can visually confirm you're talking to your
-   own console.
-
-Recent IP:port pairs you've connected to are remembered under **RECENT** for
-one-tap reconnecting; a **Clean** action appears once that list gets long.
-
-![Link screen connected via Wi-Fi, device panel visible](docs/images/link-wifi.png)
-
-### USB
-
-1. Connect the Vita to your PC with a USB cable.
-2. On the Vita, from VitaShell's Start menu, pick **USB** (the same panel
-   that offers FTP). The console shows a "USB Connected" screen; while this
-   is active, Wi-Fi/FTP is not reachable — the two modes are exclusive on
-   the console side, not just in this app.
-3. In VitaSync's **Link** screen, choose the **USB** mode and press
-   **Scan**. The app looks for a mounted volume carrying both a Vita-written
-   `id.dat` and a VitaShell install folder, which is specific enough to tell
-   your Vita's memory card apart from an unrelated USB drive.
-4. Pick the detected volume (or point the app at it manually if the scan
-   doesn't find it) and press **Connect**.
-
-USB mode targets the default **Memory Card** export only. Game Card, SD2Vita
-or PSVSD USB modes on the console export a different partition layout and
-are not supported.
-
-> [Screenshot: Link screen connected via USB, detected volume chip selected]
-
----
-
-## What it does
-
-### Installing games
-
-Drag one of the following onto the **Install** screen:
-
-- **A `.vpk` file** — the app reads the Title ID and exact name straight out
-  of the package (`param.sfo`), looks up cover art in the offline title
-  database, and shows both before you press Start. There is no
-  remote-install command on a jailbroken Vita, so after uploading and
-  verifying the transfer, the app tells you the one step left: **press X on
-  the file in VitaShell.**
-- **An unpacked game folder** (named by the game's serial, e.g.
-  `PCSE00001/`) — sent whole to the console in its installed shape. No
-  install step exists for this one; the app tells you to use **Refresh
-  LiveArea** in VitaShell instead, which is what makes the console notice it.
-- **A NoNpDrm-style dump** — a folder containing `app/`, `addcont/`, and/or
-  `license/` subfolders, each holding one or more serial-named game folders.
-  Each part is recognized and routed to its own correct destination on the
-  console (app data, add-on content, and license data each land in a
-  different place); a drop with two parts shows two separate staged rows so
-  you can see exactly what's going where before pressing Start.
-
-`.pkg` files are not supported — folder-format and `.vpk` only.
-
-> [Screenshot: Install screen with a staged VPK, cover art and destination visible]
-
-### Transferring media
-
-Drag video, photo, or music files onto **Install** and the app routes them
-to the correct folder on the console automatically — no manual path picking
-for the common case, with manual override available if you want one.
-
-### Installing themes
-
-There are two different things called a "theme" on a jailbroken Vita, and
-this app tells them apart automatically:
-
-- **A PS Vita home-screen theme** (a folder with `theme.xml` at its root) —
-  installed to the console's custom-theme folder, and applied afterward with
-  **Custom Themes Manager** on the device.
-- **A VitaShell skin** (a folder of `colors.txt` and/or VitaShell's
-  documented image set) — installed to VitaShell's own theme folder, and
-  picked from inside **VitaShell itself** (press START, then left/right to
-  choose it, then Restart VitaShell).
-
-Drag either kind onto **Install** the same way as a game — the app shows the
-theme's real name and its own preview art before you press Start, and tells
-you which tool to use to finish once the transfer is done. The app never
-switches your active skin for you; that choice stays yours.
-
-![Install screen with a staged theme, name and preview art visible](docs/images/install.png)
-
-### Browsing the console
-
-The **Browse** screen is a full remote file manager: navigate folders,
-rename, delete, move, and create folders, on either connection mode. Root
-shows every partition the console has (`ux0:`, `ur0:`, and so on), not just
-one. Multi-select works by click/ctrl-click/shift-click or by drag-select
-(a rubber-band box on desktop; press-and-hold to start a selection on
-touch), and drag & drop works both within the remote tree and between the
-remote tree and your PC's own file explorer.
-
-![Browse screen at the true root, showing multiple partitions](docs/images/browse.png)
-
-### Downloading from the console
-
-Also from **Browse**, navigate to the console's photo, video, or savedata
-locations, select what you want (single files or whole folders, drag-select
-included), and download to a folder you choose on your PC. Folders come
-back whole, subfolders and all.
-
-![Transfers screen with two theme installs verified and awaiting confirmation on the Vita](docs/images/transfers.png)
-
----
-
-## Building from source
-
-### Desktop (Linux / Windows)
-
-```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-./build/desktop/vitasync
+```powershell
+Get-FileHash .\VitaSync-2.0-Windows-x64-Setup.exe -Algorithm SHA256
 ```
 
-Needs Qt 6.5+ (Core, Network, Concurrent, Quick, QuickControls2) and zlib.
-Qt Multimedia is optional — without it, video previews fall back to a drawn
-plate instead of a decoded frame.
+Windows 10/11 x64 is the package target. Linux source builds are supported;
+Android scaffolding is experimental and is not included in this release.
+The Windows binaries are not code-signed.
 
-Useful command-line flags:
+## What's new in 2.0
 
-```bash
-vitasync game.vpk theme.zip                            # stage files on start
-vitasync --connect 192.168.0.40                        # connect without typing the address
-vitasync --connect 192.168.0.40:1337 --send game.vpk   # scripted install
-vitasync --log                                         # mirror the protocol trace to stderr
-vitasync --view browse                                 # start on a given screen
-vitasync --connect 192.168.0.40 --path /ux0:/video     # open a folder directly
-vitasync --screenshot out.png --screenshot-delay 800    # render one frame and exit
-```
+- A calmer graphite interface, clearer navigation, and simpler forms.
+- Background USB detection, automatic selection of a single matching drive,
+  storage-layout checks, and Windows USB device identification.
+- A manual drive picker when automatic detection misses a mounted card.
+- Windows USB copy fixes and a mount picker limited to the exported `ux0:`.
+- Recent successful FTP connections that restore both address and port.
+  History stays in the user's configuration, outside the project.
+- The original transparent desktop/taskbar logo, with a separate interface icon.
+- Windows-compatible test fixtures and regression coverage for history,
+  USB scanning, hotplug selection, and transport switching.
 
-### Android
+## Connect your Vita
 
-Wired but not yet built as part of this project — needs a Qt-for-Android
-kit, which the development machine used so far did not have installed.
+You need VitaShell and either a USB data cable or a PC on the same Wi-Fi
+network as your Vita. Select one connection mode at a time.
 
-```bash
-qt-cmake -S . -B build-android \
-    -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
-    -DANDROID_ABI=arm64-v8a -DQT_ANDROID_ABIS=arm64-v8a
-cmake --build build-android --target apk
-```
+### Wi-Fi / FTP
 
-### Tests
+1. In VitaShell, press **START** and set **SELECT button** to **FTP**.
+2. Close the menu and press **SELECT** to start the FTP server.
+3. In VitaSync's **Connection** page, select **Wi-Fi / FTP**, enter the
+   address and port displayed by VitaShell, and press **Connect**.
 
-```bash
+Successful endpoints appear under **Recent connections**. Selecting one
+restores both fields; **Clear** removes the history. Failed connections are
+not remembered. A fresh configuration defaults to `127.0.0.1:1337`.
+Settings live in the user's application configuration directory, not in the
+repository, installer, or portable folder.
+
+<p align="center">
+  <img src="docs/images/link-wifi.png" alt="FTP connection using a local test server" width="960">
+</p>
+
+### USB cable
+
+1. Connect the Vita using a USB data cable.
+2. In VitaShell, press **START**, set **SELECT button** to **USB**, choose
+   your storage device, close the menu, and press **SELECT**.
+3. In VitaSync, select **USB cable**. Drives are scanned in the background
+   about once per second while disconnected.
+4. A single matching drive is selected automatically. Press **Connect USB**.
+   With several candidates, choose the correct drive.
+5. If Windows File Explorer shows the drive but it is not detected, use
+   **Select drive manually**. If Windows cannot see it either, check the
+   cable and VitaShell's selected USB device.
+6. Finish transfers and safely eject the drive before unplugging it.
+
+USB exposes one storage device as `ux0:`. Use FTP for other partitions.
+See [USB behavior and detection](docs/usb.md) for details. Automated tests
+use local storage fixtures; physical device identification and abrupt-unplug
+write durability remain hardware checks.
+
+## Send files, games, and themes
+
+Drop files onto **Send files**, review their destinations, and start the transfer.
+
+- **VPK packages:** upload and verify the reported size, then open the VPK
+  in VitaShell and press **X**. Uploading alone does not install the package.
+- **Unpacked game folders:** copy serial-named folders, then use VitaShell's
+  **Refresh LiveArea** to make the console discover them.
+- **Folder dumps:** `app/`, `addcont/`, and `license/` content goes to the
+  corresponding locations. `.pkg` files are not supported.
+- **Photos, music, and videos:** supported files go to their media folders.
+- **Custom Vita themes:** send a folder containing `theme.xml`, then apply
+  it with Custom Themes Manager on the console.
+- **VitaShell skins:** send the skin, then select it in VitaShell's settings.
+  VitaSync does not change the active skin automatically.
+
+<p align="center">
+  <img src="docs/images/install.png" alt="Send files screen with a sample VitaShell skin" width="960">
+</p>
+
+## Browse and download
+
+**Files on Vita** lets you browse, create folders, rename, move, delete, and
+download files or whole folders. FTP shows the console's exposed partitions;
+USB shows the exported `ux0:` drive. Multi-select and drag-and-drop are
+supported. **Transfers** shows progress and the verification result.
+
+<p align="center">
+  <img src="docs/images/browse.png" alt="File browser showing test console partitions" width="960">
+</p>
+<p align="center">
+  <img src="docs/images/transfers.png" alt="Completed transfer of a generated sample file" width="960">
+</p>
+
+Documentation screenshots use generated fixtures and a loopback FTP server.
+They do not contain files copied from a personal Vita.
+
+## Build from source
+
+Requirements: CMake 3.21+, a C++17 compiler, Qt 6.5+ (Core, Gui, Network,
+Concurrent, Quick, QuickControls2, Svg, and Test when enabled), and zlib.
+Qt Multimedia is optional; without it, videos use a placeholder preview.
+Match the compiler to the Qt kit; the Windows release uses Qt 6.8.3 and MinGW.
+
+With a matching Qt kit, compiler, CMake, and Ninja in your terminal:
+
+```sh
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/path/to/Qt
+cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-132 tests across four suites, all against `MockVitaServer` — an in-process
-stand-in for VitaShell's FTP server that deliberately reproduces its real
-quirks and fallback behavior, not just the FTP spec, plus a USB transport
-test double for the Mass Storage path:
+On Windows, run `build/vitasync.exe` with the Qt and compiler runtime folders
+in PATH, or deploy a standalone package. On Linux, run `build/desktop/vitasync`.
 
-- **`tst_core`** — path hygiene, SFO/ZIP parsing, package and theme
-  identification, archive extraction including zip-slip refusal.
-- **`tst_transport`** — the real FTP client against the mock server:
-  uploads, downloads, verification, the size-mismatch failure path, theme
-  folder installs, recursive folder downloads, and the navigation protocol.
-- **`tst_usb`** — the USB transport against a mounted-folder test double:
-  copy, mkdir, cancel, mount-loss detection, and the async request/reply
-  contract it shares with the FTP client.
-- **`tst_device`** — `VitaDevice`, the object the UI binds to, driven the
-  way the UI drives it: drop, route, send, browse, download, refuse, across
-  both connection modes.
+### Windows packaging
 
-### A portable build to hand to a tester
+After building a Release binary, run:
 
-```bash
-tools/make_portable_linux.sh
+```powershell
+.\tools\package_windows.ps1 -BuildDir build `
+  -QtDir C:\Qt\6.8.3\mingw_64 `
+  -MinGWDir C:\Qt\Tools\mingw1310_64 `
+  -NsisExe 'C:\Program Files (x86)\NSIS\makensis.exe'
 ```
 
-Produces a self-contained folder with the binary, the Qt libraries and QML
-modules it needs, and the offline title database — extract and run, nothing
-installed. Low-level system libraries (glibc, libstdc++, the graphics
-stack) are deliberately not bundled, since those have to match the host.
+The script creates the installer, portable ZIP, checksums, and English release
+notes under `installer/`. That entire folder is ignored by Git. Publish the
+four files as GitHub Release assets rather than adding them to the repository.
+Linux packaging scripts are also available under `tools/`.
 
-### Driving the app without a Vita
+### Tests and local development
 
-The mock server used by the test suite is also a runnable binary, so every
-feature can be exercised end to end on one machine:
+Four suites cover parsing/path validation (`core`), FTP against an in-process
+mock (`transport`), mounted-folder USB operations (`usb`), and application
+integration (`device`). They do not replace testing with a physical Vita.
 
-```bash
-./build/core/tests/mockvita --port 2121 /path/to/fake-card
-./build/desktop/vitasync --connect 127.0.0.1:2121 --log
+For the Windows 2.0 build, the first three suites and 42 integration cases
+run separately passed. The FTP reconnect stress case stalled locally and
+remains unresolved; the complete integration suite is not recorded as passing.
 
-# and to watch verification fail on purpose:
-./build/core/tests/mockvita --port 2121 --corrupt-size /path/to/fake-card
+The mock server can also drive the GUI without a console:
+
+```sh
+mockvita --port 2121 /path/to/generated-card
+vitasync --connect 127.0.0.1:2121
 ```
 
----
+Useful flags include `--usb`, `--view browse`, `--log`, and
+`--screenshot output.png`. Logs can contain addresses and file paths; keep them local.
 
-## Security & privacy
+## Privacy and transfer safety
 
-- **No internet required, ever.** The only connections the app opens are to
-  the Wi-Fi address you type or the USB volume you select — nothing else.
-  No telemetry, no analytics, no update-check pinging, no phone-home.
-- **No OS username shown anywhere in the UI.** Local folder paths display
-  with your home directory collapsed to `~`; the real path is used for the
-  actual file operations, it's just never printed to the screen.
-- **Input validation** on the IP field and on any manually entered path — no
-  shell or file command is ever built by concatenating user input.
-- **Filename sanitization** against path traversal in both directions
-  (Vita → PC and PC → Vita), and specifically against zip-slip when
-  unpacking a theme archive, the one place archive contents are ever
-  written to local disk.
-- **Integrity checking** on package uploads: a SHA-256 is computed locally
-  before upload and compared against the device-reported file size
-  afterward — the strongest end-to-end check FTP actually allows, and the
-  app is explicit in its own UI about which of the two checks it performed.
-- **No plaintext credentials.** VitaShell's FTP server is anonymous by
-  default; nothing beyond that is stored.
-
----
-
-## Known limits
-
-- No `.apk` has been built or run yet — see the Android section above.
-- One transfer at a time, deliberately: both the Vita's FTP server and a
-  Mass Storage volume are effectively single-connection, and racing either
-  only produces errors.
-- The active VitaShell skin is not switched for you — copying a skin in
-  doesn't rewrite VitaShell's selection file; picking which one is live
-  stays your call.
-- USB mode targets the default Memory Card export only (see Connecting,
-  above).
-
----
+- No telemetry, account, cloud sync, or automatic update checks.
+- Addresses, ports, and folder preferences stay in local user settings.
+  They are not embedded in release packages.
+- FTP is unencrypted. Use a trusted local network and stop VitaShell's
+  server after the session.
+- Path validation, filename sanitization, and archive traversal checks guard
+  file operations. Review destinations before transferring or deleting files.
+- A local SHA-256 identifies uploads; remote verification checks the size
+  reported by the device. This is not a remote checksum comparison.
+- Transfer one item at a time and safely eject USB storage after completion.
 
 ## Project layout
 
-```
-core/vsp/       shared C++ core: RemoteTransport (interface), FtpClient,
-                UsbTransport, ZipReader, SfoReader, PackageInspector,
-                ThemeReader, ArchiveExtractor, RemoteTreeScanner,
-                TransferQueue, MetadataDb, VitaPaths, PathUtils, VitaDevice
-core/tests/     unit tests, an in-process mock of VitaShell's FTP server,
-                and mockvita -- the same mock as a runnable binary
-media/          Thumbnailer -- photo, video-frame and theme previews
-desktop/qml/    Theme (design tokens), components/, views/
-android/        manifest, theme, launcher icons (unbuilt)
-assets/covers/  titles.json -- the offline title index (4,179 titles)
-assets/logo/    app icon cut from the project's brand sheet
-tools/          build_titles.py -- regenerates the title index
-                make_portable_linux.sh -- builds a self-contained bundle
-                install_linux.sh -- per-user install of that bundle
-docs/           install-trigger.md, themes.md, browsing.md, usb.md,
-                nonpdrm.md, architecture.md -- researched, not assumed,
-                write-ups of how the console side of each feature works
-```
+| Folder | Contents |
+| --- | --- |
+| `core/vsp/` | Transports, routing, archive handling, browsing, transfer queue |
+| `core/tests/` | Tests and mock VitaShell server |
+| `desktop/qml/` | Desktop interface and components |
+| `media/` | Media and theme previews |
+| `assets/` | Public icons and offline title metadata |
+| `tools/` | Build and packaging scripts |
+| `docs/` | Implementation notes and sample screenshots |
+| `installer/` | Local release artifacts, excluded from Git |
 
----
-
-## Credits
-
-Design by jotadev27.
+Maintained by [jotadev27](https://github.com/jotadev27).

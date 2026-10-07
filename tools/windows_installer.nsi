@@ -9,11 +9,12 @@
 ; Usage (from the project root):
 ;   makensis -DSOURCE_DIR="installer/windows-portable" ^
 ;            -DOUT_FILE="installer/VitaSync-Setup.exe" ^
-;            -DAPP_VERSION="1.0.0" ^
+;            -DAPP_VERSION="2.0.0" ^
 ;            tools/windows_installer.nsi
 
 Unicode true
-Target amd64-unicode
+; The bootstrapper is 32-bit; the installed application and payload are x64.
+Target x86-unicode
 
 !ifndef SOURCE_DIR
   !define SOURCE_DIR "installer/windows-portable"
@@ -22,7 +23,7 @@ Target amd64-unicode
   !define OUT_FILE "installer/VitaSync-Setup.exe"
 !endif
 !ifndef APP_VERSION
-  !define APP_VERSION "1.0.0"
+  !define APP_VERSION "2.0.0"
 !endif
 
 !define APP_NAME "VitaSync"
@@ -31,6 +32,7 @@ Target amd64-unicode
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\VitaSync"
 
 !include "MUI2.nsh"
+!include "x64.nsh"
 
 Name "${APP_NAME}"
 OutFile "${OUT_FILE}"
@@ -62,9 +64,22 @@ VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
 VIAddVersionKey "LegalCopyright" "${APP_PUBLISHER}"
 
+Function .onInit
+    ${IfNot} ${RunningX64}
+        MessageBox MB_OK|MB_ICONSTOP "VitaSync requires 64-bit Windows."
+        Abort
+    ${EndIf}
+    SetRegView 64
+FunctionEnd
+
+Function un.onInit
+    SetRegView 64
+FunctionEnd
+
 Section "Install" SEC_INSTALL
+    SetShellVarContext all
     SetOutPath "$INSTDIR"
-    File /r "${SOURCE_DIR}/*.*"
+    File /r "${SOURCE_DIR}\*.*"
 
     CreateDirectory "$SMPROGRAMS\VitaSync"
     CreateShortcut "$SMPROGRAMS\VitaSync\VitaSync.lnk" "$INSTDIR\${APP_EXE}"
@@ -76,13 +91,14 @@ Section "Install" SEC_INSTALL
     WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "${APP_VERSION}"
     WriteRegStr HKLM "${UNINST_KEY}" "Publisher" "${APP_PUBLISHER}"
     WriteRegStr HKLM "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
-    WriteRegStr HKLM "${UNINST_KEY}" "UninstallString" "$INSTDIR\Uninstall.exe"
+    WriteRegStr HKLM "${UNINST_KEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
     WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\${APP_EXE}"
     WriteRegDWORD HKLM "${UNINST_KEY}" "NoModify" 1
     WriteRegDWORD HKLM "${UNINST_KEY}" "NoRepair" 1
 SectionEnd
 
 Section "Uninstall"
+    SetShellVarContext all
     Delete "$SMPROGRAMS\VitaSync\VitaSync.lnk"
     RMDir "$SMPROGRAMS\VitaSync"
     Delete "$DESKTOP\VitaSync.lnk"

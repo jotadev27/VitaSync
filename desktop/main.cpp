@@ -33,7 +33,9 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName(QStringLiteral("VitaSync"));
     QCoreApplication::setApplicationVersion(vsp::versionString());
     QGuiApplication::setApplicationDisplayName(vsp::applicationName());
-    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/VitaSync/Ui/brand/appicon.png")));
+    // Use the original transparent, multi-size desktop icon for the window
+    // and taskbar too, without adding a background or extra padding.
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/VitaSync/Ui/brand/vitasync.ico")));
 
     // Basic style: every control in this app is drawn by hand, so the built-in
     // styling never gets a chance to impose its own look.
@@ -56,6 +58,11 @@ int main(int argc, char *argv[])
         QStringLiteral("connect"),
         QStringLiteral("Connect to <host[:port]> on start."),
         QStringLiteral("host"));
+    const QCommandLineOption usbOption(
+        QStringLiteral("usb"), QStringLiteral("Start in USB mode and watch for Vita storage."));
+    const QCommandLineOption screenshotSizeOption(
+        QStringLiteral("screenshot-size"), QStringLiteral("Window size for a capture, for example 900x560."),
+        QStringLiteral("size"));
     const QCommandLineOption sendOption(
         QStringLiteral("send"),
         QStringLiteral("Send the staged files as soon as the device answers."));
@@ -78,6 +85,8 @@ int main(int argc, char *argv[])
     parser.addOption(screenshotDelayOption);
     parser.addOption(viewOption);
     parser.addOption(connectOption);
+    parser.addOption(usbOption);
+    parser.addOption(screenshotSizeOption);
     parser.addOption(sendOption);
     parser.addOption(pathOption);
     parser.addOption(logOption);
@@ -87,6 +96,13 @@ int main(int argc, char *argv[])
                                  QStringLiteral("Packages or media to stage on start."),
                                  QStringLiteral("[files...]"));
     parser.process(app);
+    if (parser.isSet(usbOption) && parser.isSet(connectOption)) {
+        fprintf(stderr, "Choose either --usb or --connect.\n");
+        return 1;
+    }
+    // Documentation/mock captures must not overwrite real connection history.
+    if (parser.isSet(screenshotOption))
+        QStandardPaths::setTestModeEnabled(true);
 
     qmlRegisterUncreatableType<vsp::RemoteBrowserModel>(
         "VitaSync", 1, 0, "RemoteBrowserModel",
@@ -102,6 +118,8 @@ int main(int argc, char *argv[])
         QStringLiteral("Provided by Device.metadata"));
 
     auto *device = new vsp::VitaDevice(&app);
+    if (parser.isSet(usbOption))
+        device->setConnectionMode(QStringLiteral("usb"));
 
     // Previews for staged files: embedded artwork, a photo scaled down, a
     // decoded video frame, or a plate drawn from a theme's own colours. All of
@@ -132,7 +150,15 @@ int main(int argc, char *argv[])
     const QString startView = parser.isSet(viewOption) || staged.isEmpty()
                                   ? parser.value(viewOption)
                                   : QStringLiteral("install");
-    engine.setInitialProperties({ { QStringLiteral("startView"), startView } });
+    QVariantMap initialProperties { { QStringLiteral("startView"), startView } };
+    if (parser.isSet(screenshotOption) && parser.isSet(screenshotSizeOption)) {
+        const QStringList size = parser.value(screenshotSizeOption).split(QLatin1Char('x'));
+        if (size.size() == 2) {
+            initialProperties.insert(QStringLiteral("width"), qBound(900, size[0].toInt(), 3840));
+            initialProperties.insert(QStringLiteral("height"), qBound(560, size[1].toInt(), 2160));
+        }
+    }
+    engine.setInitialProperties(initialProperties);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.loadFromModule("VitaSync.Ui", "Main");

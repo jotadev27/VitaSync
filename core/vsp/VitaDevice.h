@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QStringList>
 #include <QVariantList>
+#include <functional>
 
 QT_BEGIN_NAMESPACE
 class QSettings;
@@ -41,6 +42,7 @@ class VitaDevice : public QObject
     Q_PROPERTY(QString usbRootPath READ usbRootPath WRITE setUsbRootPath NOTIFY usbRootPathChanged)
     Q_PROPERTY(QString usbRootPathDisplay READ usbRootPathDisplay NOTIFY usbRootPathChanged)
     Q_PROPERTY(QVariantList usbCandidates READ usbCandidates NOTIFY usbCandidatesChanged)
+    Q_PROPERTY(bool usbScanning READ usbScanning NOTIFY usbScanningChanged)
 
     /// What the top bar shows next to the status dot: "host" / ":port" over
     /// FTP, or the mounted volume's own name / "USB" over USB -- never an
@@ -58,7 +60,7 @@ class VitaDevice : public QObject
     Q_PROPERTY(QString currentPath READ currentPath NOTIFY locationChanged)
     Q_PROPERTY(QString mount READ mount WRITE setMount NOTIFY locationChanged)
     Q_PROPERTY(QVariantList breadcrumb READ breadcrumb NOTIFY locationChanged)
-    Q_PROPERTY(QVariantList mountPoints READ mountPoints CONSTANT)
+    Q_PROPERTY(QVariantList mountPoints READ mountPoints NOTIFY connectionModeChanged)
     Q_PROPERTY(QVariantList quickLocations READ quickLocations NOTIFY locationChanged)
     Q_PROPERTY(bool listing READ isListing NOTIFY locationChanged)
 
@@ -77,7 +79,8 @@ class VitaDevice : public QObject
     Q_PROPERTY(vsp::MetadataDb *metadata READ metadata CONSTANT)
 
 public:
-    explicit VitaDevice(QObject *parent = nullptr);
+    using UsbDetector = std::function<QVector<UsbTransport::Candidate>()>;
+    explicit VitaDevice(QObject *parent = nullptr, UsbDetector usbDetector = {});
     ~VitaDevice() override;
 
     QString host() const { return m_host; }
@@ -97,6 +100,7 @@ public:
     /// account name to anyone looking at the app on someone else's machine.
     QString usbRootPathDisplay() const;
     QVariantList usbCandidates() const;
+    bool usbScanning() const { return m_usbScanInFlight; }
     QString connectionSummary() const;
     QString connectionDetail() const;
 
@@ -138,7 +142,7 @@ public:
 public slots:
     void connectToVita();
     /// Attaches to usbRootPath (or the sole detected candidate, if none was
-    /// picked). The Wi-Fi/FTP connection, if any, is untouched.
+    /// picked). Switches from FTP if necessary.
     void connectUsb();
     void disconnectFromVita();
 
@@ -178,6 +182,7 @@ signals:
     void connectionModeChanged();
     void usbRootPathChanged();
     void usbCandidatesChanged();
+    void usbScanningChanged();
     void statusChanged();
     void locationChanged();
     void settingsChanged();
@@ -240,6 +245,12 @@ private:
     QSettings *m_settings = nullptr;
     QTimer *m_reconnect = nullptr;
     QTimer *m_keepAlive = nullptr;
+    QTimer *m_usbScanTimer = nullptr;
+    QFutureWatcher<QVector<UsbTransport::Candidate>> *m_usbScanWatcher = nullptr;
+    bool m_usbScanInFlight = false;
+    bool m_pendingUsbConnect = false;
+    QString m_autoUsbRoot;
+    UsbDetector m_usbDetector;
 
     QString m_host;
     int m_port = 1337;

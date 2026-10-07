@@ -16,6 +16,7 @@
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
+#include <QtConcurrent/QtConcurrentRun>
 
 namespace vsp {
 namespace {
@@ -52,7 +53,7 @@ QString localDownloadDirFor(const QString &baseDir, const QString &fileName)
 
 } // namespace
 
-VitaDevice::VitaDevice(QObject *parent)
+VitaDevice::VitaDevice(QObject *parent, UsbDetector usbDetector)
     : QObject(parent)
     , m_ftp(new FtpClient(this))
     , m_usb(new UsbTransport(this))
@@ -61,14 +62,56 @@ VitaDevice::VitaDevice(QObject *parent)
     , m_transfers(new TransferQueue(this))
     , m_drops(new DropStageModel(this))
     , m_metadata(new MetadataDb(this))
-    , m_settings(new QSettings(QStringLiteral("VitaSync"), QStringLiteral("VitaSync"), this))
+    , m_settings(new QSettings(
+          QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+              + QStringLiteral("/settings.ini"), QSettings::IniFormat, this))
     , m_reconnect(new QTimer(this))
     , m_keepAlive(new QTimer(this))
+    , m_usbScanTimer(new QTimer(this))
+    , m_usbScanWatcher(new QFutureWatcher<QVector<UsbTransport::Candidate>>(this))
+    , m_usbDetector(usbDetector ? std::move(usbDetector) : UsbDetector([] {
+          return UsbTransport::detectCandidates();
+      }))
 {
     m_active = m_ftp;
     m_attachedTransport = m_ftp;
     m_transfers->attach(m_ftp, m_companion);
     m_drops->setMetadataDb(m_metadata);
+
+    m_usbScanTimer->setInterval(1000);
+    connect(m_usbScanTimer, &QTimer::timeout, this, [this] {
+        if (m_connectionMode == QLatin1String("usb") && !isConnected())
+            refreshUsbCandidates();
+    });
+    connect(m_usbScanWatcher, &QFutureWatcher<QVector<UsbTransport::Candidate>>::finished,
+            this, [this] {
+        const auto candidates = m_usbScanWatcher->result();
+        const bool changed = candidates != m_usbCandidates;
+        m_usbCandidates = candidates;
+        m_usbScanInFlight = false;
+        // Replace a disappeared automatic selection, preserving manual picks.
+        if (!isConnected() && (m_usbRootPath.isEmpty() || m_usbRootPath == m_autoUsbRoot)) {
+            const QString root = m_usbCandidates.size() == 1
+                ? m_usbCandidates.first().rootPath : QString();
+            setUsbRootPath(root);
+            m_autoUsbRoot = root;
+        }
+        if (changed)
+            emit usbCandidatesChanged();
+        emit usbScanningChanged();
+        if (m_pendingUsbConnect && m_connectionMode == QLatin1String("usb")) {
+            m_pendingUsbConnect = false;
+            if (!m_usbRootPath.isEmpty()) {
+                connectUsb();
+            } else {
+                const QString message = m_usbCandidates.isEmpty()
+                    ? QStringLiteral("No Vita drive mounted yet. Check whether it appears in your file explorer.")
+                    : QStringLiteral("Select the Vita drive below.");
+                setStatus(message, QStringLiteral("warn"));
+                emit notify(message, QStringLiteral("warn"));
+            }
+        }
+    });
 
     m_reconnect->setSingleShot(true);
     connect(m_reconnect, &QTimer::timeout, this, [this] {
@@ -187,10 +230,13 @@ VitaDevice::VitaDevice(QObject *parent)
             });
 
     loadSettings();
+    QTimer::singleShot(0, this, &VitaDevice::refreshUsbCandidates);
 }
 
 VitaDevice::~VitaDevice()
 {
+    m_usbScanTimer->stop();
+    m_usbScanWatcher->waitForFinished();
     saveSettings();
 }
 
@@ -203,11 +249,37 @@ QString VitaDevice::appVersion() const
 
 void VitaDevice::loadSettings()
 {
-    m_host = m_settings->value(QStringLiteral("connection/host")).toString();
+    // Preserve preferences from earlier releases that used the platform's
+    // native QSettings store (the registry on Windows). Tests stay isolated.
+    if (!QFileInfo::exists(m_settings->fileName()) && !QStandardPaths::isTestModeEnabled()) {
+        QSettings legacy(QStringLiteral("VitaSync"), QStringLiteral("VitaSync"));
+        const QStringList keys {
+            QStringLiteral("connection/host"), QStringLiteral("connection/port"),
+            QStringLiteral("connection/recent"), QStringLiteral("browser/mount"),
+            QStringLiteral("transfer/downloadDir"), QStringLiteral("metadata/coverPack"),
+            QStringLiteral("device/keepAwake")
+        };
+        for (const QString &key : keys) {
+            if (legacy.contains(key))
+                m_settings->setValue(key, legacy.value(key));
+        }
+    }
+    m_host = m_settings->value(QStringLiteral("connection/host"), QStringLiteral("127.0.0.1")).toString();
+    if (!path::isValidIPv4(m_host))
+        m_host = QStringLiteral("127.0.0.1");
     m_port = m_settings->value(QStringLiteral("connection/port"), 1337).toInt();
     if (!path::isValidPort(m_port))
         m_port = 1337;
-    m_recentHosts = m_settings->value(QStringLiteral("connection/recent")).toStringList();
+    const QStringList stored = m_settings->value(QStringLiteral("connection/recent")).toStringList();
+    for (const QString &entry : stored) {
+        const int colon = entry.lastIndexOf(QLatin1Char(':'));
+        bool ok = false;
+        const int port = entry.mid(colon + 1).toInt(&ok);
+        if (colon > 0 && path::isValidIPv4(entry.left(colon)) && ok
+            && path::isValidPort(port) && !m_recentHosts.contains(entry)
+            && m_recentHosts.size() < kMaxRecentHosts)
+            m_recentHosts.append(entry);
+    }
     m_mount = m_settings->value(QStringLiteral("browser/mount"), QStringLiteral("ux0:")).toString();
     m_currentPath = QStringLiteral("/") + m_mount;
     m_keepAwake = m_settings->value(QStringLiteral("device/keepAwake"), true).toBool();
@@ -250,8 +322,7 @@ void VitaDevice::loadSettings()
 
 void VitaDevice::saveSettings()
 {
-    m_settings->setValue(QStringLiteral("connection/host"), m_host);
-    m_settings->setValue(QStringLiteral("connection/port"), m_port);
+    // Only rememberHost() persists an endpoint, after a successful connection.
     m_settings->setValue(QStringLiteral("connection/recent"), m_recentHosts);
     m_settings->setValue(QStringLiteral("browser/mount"), m_mount);
     m_settings->setValue(QStringLiteral("transfer/downloadDir"), m_downloadDir);
@@ -293,9 +364,17 @@ void VitaDevice::setConnectionMode(const QString &mode)
     // Switching mode while linked would leave two connections half-alive;
     // the UI only ever shows one Connect/Disconnect button, so drop the old
     // one first, exactly as if the user had pressed Disconnect.
-    if (isConnected())
+    if (isConnected() || isConnecting())
         disconnectFromVita();
     m_connectionMode = normalized;
+    m_pendingUsbConnect = false;
+    if (normalized == QLatin1String("usb")) {
+        setMount(QStringLiteral("ux0:"));
+        m_usbScanTimer->start();
+        refreshUsbCandidates();
+    } else {
+        m_usbScanTimer->stop();
+    }
     emit connectionModeChanged();
     // connectionSummary()/connectionDetail() both depend on the mode too.
     emit connectionInfoChanged();
@@ -303,7 +382,7 @@ void VitaDevice::setConnectionMode(const QString &mode)
 
 void VitaDevice::setUsbRootPath(const QString &rootPath)
 {
-    const QString cleaned = toLocalDirectory(rootPath);
+    const QString cleaned = rootPath.trimmed().isEmpty() ? QString() : toLocalDirectory(rootPath);
     if (m_usbRootPath == cleaned)
         return;
     m_usbRootPath = cleaned;
@@ -341,7 +420,7 @@ QVariantList VitaDevice::usbCandidates() const
         list.append(QVariantMap {
             { QStringLiteral("rootPath"), candidate.rootPath },
             { QStringLiteral("label"), candidate.label },
-            { QStringLiteral("verified"), UsbTransport::looksLikeVitaVolume(candidate.rootPath) },
+            { QStringLiteral("verified"), candidate.verified },
             { QStringLiteral("sizeText"), path::humanSize(candidate.bytesTotal) },
             { QStringLiteral("freeText"), path::humanSize(candidate.bytesFree) }
         });
@@ -351,8 +430,11 @@ QVariantList VitaDevice::usbCandidates() const
 
 void VitaDevice::refreshUsbCandidates()
 {
-    m_usbCandidates = UsbTransport::detectCandidates();
-    emit usbCandidatesChanged();
+    if (m_usbScanInFlight)
+        return;
+    m_usbScanInFlight = true;
+    emit usbScanningChanged();
+    m_usbScanWatcher->setFuture(QtConcurrent::run(m_usbDetector));
 }
 
 bool VitaDevice::isConnected() const
@@ -382,8 +464,8 @@ void VitaDevice::connectToVita()
         return;
     }
 
+    setConnectionMode(QStringLiteral("ftp"));
     m_userWantsConnection = true;
-    m_connectionMode = QStringLiteral("ftp");
     m_active = m_ftp;
     // TransferQueue/RemoteTreeScanner run against whichever transport is
     // live; only re-point them when that is actually changing (a mode
@@ -399,24 +481,15 @@ void VitaDevice::connectToVita()
 
 void VitaDevice::connectUsb()
 {
+    setConnectionMode(QStringLiteral("usb"));
     if (m_usbRootPath.isEmpty()) {
-        // No manual pick: attach to the sole detected candidate. Two or more
-        // is left for the user to choose between in the UI.
+        m_pendingUsbConnect = true;
         refreshUsbCandidates();
-        if (m_usbCandidates.size() == 1)
-            setUsbRootPath(m_usbCandidates.first().rootPath);
-    }
-    if (m_usbRootPath.isEmpty()) {
-        const QString message = m_usbCandidates.isEmpty()
-            ? QStringLiteral("No USB-connected Vita found. Plug in the cable and pick USB in VitaShell.")
-            : QStringLiteral("More than one USB drive matched — pick one below.");
-        setStatus(message, QStringLiteral("error"));
-        emit notify(message, QStringLiteral("warn"));
+        setStatus(QStringLiteral("Looking for a Vita USB drive"), QStringLiteral("busy"));
         return;
     }
 
     m_userWantsConnection = true;
-    m_connectionMode = QStringLiteral("usb");
     m_active = m_usb;
     if (m_attachedTransport != m_active) {
         m_attachedTransport = m_active;
@@ -429,6 +502,7 @@ void VitaDevice::connectUsb()
 
 void VitaDevice::disconnectFromVita()
 {
+    m_pendingUsbConnect = false;
     m_userWantsConnection = false;
     m_reconnect->stop();
     m_keepAlive->stop();
@@ -487,6 +561,8 @@ void VitaDevice::onFtpStateChanged(RemoteTransport::State state)
 
 void VitaDevice::setMount(const QString &mount)
 {
+    if (m_connectionMode == QLatin1String("usb") && mount != QLatin1String("ux0:"))
+        return;
     if (m_mount == mount)
         return;
     m_mount = mount;
@@ -583,6 +659,8 @@ QVariantList VitaDevice::mountPoints() const
     QVariantList list;
     const QVector<VitaLocation> points = vitapaths::mountPoints();
     for (const VitaLocation &point : points) {
+        if (m_connectionMode == QLatin1String("usb") && point.id != QLatin1String("ux0"))
+            continue;
         list.append(QVariantMap {
             { QStringLiteral("id"), point.id },
             { QStringLiteral("label"), point.label },
@@ -924,7 +1002,7 @@ void VitaDevice::clearLog()
 
 void VitaDevice::rememberHost(const QString &host, int port)
 {
-    if (host.isEmpty())
+    if (!path::isValidIPv4(host) || !path::isValidPort(port))
         return;
     // Stored as one "host:port" entry so re-selecting it restores the port
     // it actually worked on, not just the bare address -- a Vita on a
@@ -934,6 +1012,10 @@ void VitaDevice::rememberHost(const QString &host, int port)
     m_recentHosts.prepend(entry);
     while (m_recentHosts.size() > kMaxRecentHosts)
         m_recentHosts.removeLast();
+    m_settings->setValue(QStringLiteral("connection/host"), host);
+    m_settings->setValue(QStringLiteral("connection/port"), port);
+    m_settings->setValue(QStringLiteral("connection/recent"), m_recentHosts);
+    m_settings->sync();
     emit connectionInfoChanged();
 }
 
@@ -944,7 +1026,7 @@ void VitaDevice::selectRecentHost(const QString &entry)
         return;
     bool ok = false;
     const int port = entry.mid(colon + 1).toInt(&ok);
-    if (!ok)
+    if (!ok || !path::isValidIPv4(entry.left(colon)) || !path::isValidPort(port))
         return;
     setHost(entry.left(colon));
     setPort(port);
@@ -955,6 +1037,8 @@ void VitaDevice::clearRecentHosts()
     if (m_recentHosts.isEmpty())
         return;
     m_recentHosts.clear();
+    m_settings->remove(QStringLiteral("connection/recent"));
+    m_settings->sync();
     emit connectionInfoChanged();
 }
 

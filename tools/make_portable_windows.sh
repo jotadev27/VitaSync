@@ -7,7 +7,7 @@
 #
 # Needs a MinGW64 Qt6 cross-toolchain, e.g. on Fedora:
 #   sudo dnf install mingw64-gcc-c++ mingw64-qt6-qtbase \
-#       mingw64-qt6-qtdeclarative mingw64-qt6-qttools mingw64-zlib
+#       mingw64-qt6-qtdeclarative mingw64-qt6-qttools mingw64-qt6-qtsvg mingw64-zlib
 #
 # Usage: tools/make_portable_windows.sh [output-dir]
 

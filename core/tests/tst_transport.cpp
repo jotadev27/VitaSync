@@ -33,7 +33,7 @@ private:
 
     QString deviceFile(const QString &relative) const
     {
-        return m_deviceRoot.filePath(relative);
+        return MockVitaServer::fixturePath(m_deviceRoot.path(), relative);
     }
 
     static bool writeFile(const QString &path, const QByteArray &content)
@@ -83,9 +83,9 @@ private slots:
         QVERIFY(m_localRoot.isValid());
 
         // Give the fake device the folder layout a real one has.
-        QDir(m_deviceRoot.path()).mkpath(QStringLiteral("ux0:/vpk"));
-        QDir(m_deviceRoot.path()).mkpath(QStringLiteral("ux0:/video"));
-        QDir(m_deviceRoot.path()).mkpath(QStringLiteral("ux0:/user/00/savedata"));
+        QDir().mkpath(deviceFile(QStringLiteral("ux0:/vpk")));
+        QDir().mkpath(deviceFile(QStringLiteral("ux0:/video")));
+        QDir().mkpath(deviceFile(QStringLiteral("ux0:/user/00/savedata")));
 
         QFile save(deviceFile(QStringLiteral("ux0:/user/00/savedata/PCSE00001.bin")));
         QVERIFY(save.open(QIODevice::WriteOnly));
@@ -493,7 +493,7 @@ private slots:
 
         // Every file arrived, including the one in a subfolder, with its bytes
         // intact and its structure preserved.
-        const QString root = m_deviceRoot.path() + QStringLiteral("/ux0:/customtheme/Hu-Tao_Theme");
+        const QString root = deviceFile(QStringLiteral("ux0:/customtheme/Hu-Tao_Theme"));
         QVERIFY(QFileInfo::exists(root + QStringLiteral("/theme.xml")));
         QVERIFY(QFileInfo::exists(root + QStringLiteral("/br.png")));
         QVERIFY(QFileInfo::exists(root + QStringLiteral("/preview_thumbnail.png")));
@@ -533,8 +533,7 @@ private slots:
                  QStringLiteral("/ux0:/VitaShell/theme/Midnight"));
         QVERIFY(readySpy.first().at(3).toString().contains(QLatin1String("VitaShell")));
 
-        const QString root = m_deviceRoot.path()
-                             + QStringLiteral("/ux0:/VitaShell/theme/Midnight");
+        const QString root = deviceFile(QStringLiteral("ux0:/VitaShell/theme/Midnight"));
         QVERIFY(QFileInfo::exists(root + QStringLiteral("/colors.txt")));
         QVERIFY(QFileInfo::exists(root + QStringLiteral("/wallpaper.png")));
     }
@@ -549,7 +548,7 @@ private slots:
         QVERIFY(connectClient(&client));
 
         // A savedata folder with a subfolder and an empty folder in it.
-        const QString base = m_deviceRoot.path() + QStringLiteral("/ux0:/user/00/savedata/PCSE00042");
+        const QString base = deviceFile(QStringLiteral("ux0:/user/00/savedata/PCSE00042"));
         QVERIFY(QDir().mkpath(base + QStringLiteral("/sub")));
         QVERIFY(QDir().mkpath(base + QStringLiteral("/empty")));
         QVERIFY(writeFile(base + QStringLiteral("/data.bin"), QByteArray(3000, 'D')));
@@ -594,7 +593,7 @@ private slots:
         queue.attach(&client, nullptr);
         QVERIFY(connectClient(&client));
 
-        QVERIFY(QDir().mkpath(m_deviceRoot.path() + QStringLiteral("/ux0:/video/holiday")));
+        QVERIFY(QDir().mkpath(deviceFile(QStringLiteral("ux0:/video/holiday"))));
 
         QTemporaryDir destination;
         QSignalSpy finishedSpy(&queue, &TransferQueue::jobFinished);
@@ -618,7 +617,7 @@ private slots:
         queue.attach(&client, nullptr);
         QVERIFY(connectClient(&client));
 
-        const QString base = m_deviceRoot.path() + QStringLiteral("/ux0:/video/odd");
+        const QString base = deviceFile(QStringLiteral("ux0:/video/odd"));
         QVERIFY(QDir().mkpath(base));
         QVERIFY(writeFile(base + QStringLiteral("/..hidden.bin"), QByteArray(64, 'H')));
         QVERIFY(writeFile(base + QStringLiteral("/normal.bin"), QByteArray(64, 'N')));

@@ -6,12 +6,14 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QStorageInfo>
+#include <QSet>
 #include <QTimer>
 #include <QtConcurrent/QtConcurrentRun>
 
 #if defined(Q_OS_WIN)
 #include <io.h>
 #include <qt_windows.h>
+#include <winioctl.h>
 #else
 #include <fcntl.h>
 #include <unistd.h>
@@ -21,6 +23,47 @@ namespace vsp {
 
 namespace {
 constexpr qint64 kCopyChunk = 1 * 1024 * 1024;
+
+#if defined(Q_OS_WIN)
+bool hasVitaUsbIdentity(const QString &root)
+{
+    // VitaShell advertises its mass-storage device as "PS Vita" MC. Reading
+    // this descriptor needs no administrator privileges and also recognises
+    // a nearly empty card whose exported partition has no VitaShell folder.
+    const QString drive = QDir::toNativeSeparators(QDir(root).absolutePath());
+    if (drive.size() != 3 || drive.at(1) != QLatin1Char(':'))
+        return false;
+    const std::wstring device = (QStringLiteral("\\\\.\\") + drive.left(2)).toStdWString();
+    HANDLE handle = CreateFileW(device.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                               nullptr, OPEN_EXISTING, 0, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+        return false;
+    STORAGE_PROPERTY_QUERY query {};
+    query.PropertyId = StorageDeviceProperty;
+    query.QueryType = PropertyStandardQuery;
+    QByteArray buffer(4096, '\0');
+    DWORD received = 0;
+    const bool ok = DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY,
+                                   &query, sizeof(query), buffer.data(), DWORD(buffer.size()),
+                                   &received, nullptr);
+    CloseHandle(handle);
+    if (!ok || received < sizeof(STORAGE_DEVICE_DESCRIPTOR))
+        return false;
+    const auto *descriptor = reinterpret_cast<const STORAGE_DEVICE_DESCRIPTOR *>(buffer.constData());
+    if (descriptor->BusType != BusTypeUsb)
+        return false;
+    const auto textAt = [&buffer, received](DWORD offset) {
+        if (!offset || offset >= received)
+            return QString();
+        const QByteArray value = buffer.mid(offset, received - offset);
+        const int end = value.indexOf('\0');
+        return QString::fromLatin1(value.constData(), end < 0 ? value.size() : end);
+    };
+    const QString identity = textAt(descriptor->VendorIdOffset) + QLatin1Char(' ')
+        + textAt(descriptor->ProductIdOffset);
+    return identity.contains(QLatin1String("PS Vita"), Qt::CaseInsensitive);
+}
+#endif
 
 // A USB Mass Storage volume is exactly the case QFile::flush() does not
 // cover: flush() only pushes QFile's own buffer out to the OS, and the OS is
@@ -40,23 +83,14 @@ bool syncFile(QFile &file)
     return handle != INVALID_HANDLE_VALUE && FlushFileBuffers(handle);
 }
 
-// A newly created file or directory is a change to its *parent* directory's
-// entries, which is a separate piece of metadata from the file's own bytes
-// and is not synced by syncFile() above. exFAT/FAT drivers -- what a Vita
-// card almost always is -- commonly do not journal metadata the way a
-// modern desktop filesystem does, so skipping this can lose "the file
-// exists at all" even when its contents were safely flushed.
+// Windows has no unprivileged equivalent of fsync(directory). A read-only
+// directory handle cannot be passed to FlushFileBuffers (GENERIC_WRITE is
+// required), so doing that made every successful copy/mkdir report failure.
+// Files are still flushed by syncFile(); Windows handles directory metadata.
+// The user must safely eject the volume before leaving VitaShell's USB mode.
 bool syncDirectory(const QString &path)
 {
-    const std::wstring wide = QDir::toNativeSeparators(path).toStdWString();
-    HANDLE handle = CreateFileW(wide.c_str(), GENERIC_READ,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                                nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
-    if (handle == INVALID_HANDLE_VALUE)
-        return false;
-    const bool ok = FlushFileBuffers(handle);
-    CloseHandle(handle);
-    return ok;
+    return QFileInfo(path).isDir();
 }
 #else
 bool syncFile(QFile &file)
@@ -115,22 +149,37 @@ bool UsbTransport::looksLikeVitaVolume(const QString &rootPath)
     const QDir dir(rootPath);
     if (!dir.exists())
         return false;
+#if defined(Q_OS_WIN)
+    if (hasVitaUsbIdentity(rootPath))
+        return true;
+#endif
 
-    // id.dat is written by the Vita's own OS to every memory card. Pairing it
-    // with VitaShell's own install folder (present on essentially every
-    // jailbroken card, since VitaShell is what exposes USB mode in the first
-    // place) keeps this from matching an unrelated USB drive that happens to
-    // carry a file of the same name. See docs/usb.md.
-    if (!QFileInfo(dir.filePath(QStringLiteral("id.dat"))).isFile())
-        return false;
-    return QFileInfo(dir.filePath(QStringLiteral("VitaShell"))).isDir()
-        || QFileInfo(dir.filePath(QStringLiteral("app/VITASHELL"))).isDir();
+    // VitaShell can run from a different partition than the one exported by
+    // USB. SD2Vita cards can also lack id.dat. Require VitaShell or several
+    // Vita-specific directories rather than both of the old markers.
+    const auto hasDir = [&dir](const QString &name) {
+        return QFileInfo(dir.filePath(name)).isDir();
+    };
+    if (hasDir(QStringLiteral("VitaShell")) || hasDir(QStringLiteral("app/VITASHELL")))
+        return true;
+    const bool app = hasDir(QStringLiteral("app"));
+    const bool metadata = hasDir(QStringLiteral("appmeta"));
+    const bool license = hasDir(QStringLiteral("license/app"));
+    const bool saves = hasDir(QStringLiteral("user/00/savedata"));
+    const int markers = int(app) + int(metadata) + int(license) + int(saves);
+    const bool id = QFileInfo(dir.filePath(QStringLiteral("id.dat"))).isFile();
+    return (id && markers >= 2) || (app && metadata && (license || saves));
 }
 
 QVector<UsbTransport::Candidate> UsbTransport::detectCandidates(const QStringList &rootsToCheck)
 {
     QVector<Candidate> found;
+    QSet<QString> seen;
     for (const QString &root : rootsToCheck) {
+        const QString canonical = QFileInfo(root).canonicalFilePath();
+        if (canonical.isEmpty() || seen.contains(canonical))
+            continue;
+        seen.insert(canonical);
         if (!looksLikeVitaVolume(root))
             continue;
 
@@ -142,6 +191,9 @@ QVector<UsbTransport::Candidate> UsbTransport::detectCandidates(const QStringLis
                               : QFileInfo(root).fileName();
         candidate.bytesTotal = info.isValid() ? info.bytesTotal() : -1;
         candidate.bytesFree = info.isValid() ? info.bytesAvailable() : -1;
+        candidate.verified = true;
+        if (candidate.label.isEmpty())
+            candidate.label = QDir::toNativeSeparators(candidate.rootPath);
         found.append(candidate);
     }
     return found;
@@ -152,8 +204,17 @@ QVector<UsbTransport::Candidate> UsbTransport::detectCandidates()
     QStringList roots;
     const QList<QStorageInfo> volumes = QStorageInfo::mountedVolumes();
     roots.reserve(volumes.size());
-    for (const QStorageInfo &volume : volumes)
+    for (const QStorageInfo &volume : volumes) {
+        if (!volume.isValid() || !volume.isReady() || volume.isRoot())
+            continue;
+#if defined(Q_OS_WIN)
+        const std::wstring root = QDir::toNativeSeparators(volume.rootPath()).toStdWString();
+        const UINT type = GetDriveTypeW(root.c_str());
+        if (type != DRIVE_REMOVABLE && type != DRIVE_FIXED)
+            continue;
+#endif
         roots << volume.rootPath();
+    }
     return detectCandidates(roots);
 }
 

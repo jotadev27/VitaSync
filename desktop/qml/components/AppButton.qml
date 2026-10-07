@@ -20,6 +20,8 @@ Item {
     readonly property color effectiveAccent: dangerous ? Theme.purple : accent
     readonly property bool isPrimary: variant === "primary"
     readonly property bool isQuiet: variant === "quiet"
+    readonly property color fill: dangerous ? Theme.purpleDim
+        : (accent === Theme.blue ? Theme.primaryFill : Qt.darker(effectiveAccent, 1.45))
 
     implicitHeight: Theme.controlHeight
     implicitWidth: content.implicitWidth + (isQuiet ? 18 : 30)
@@ -31,13 +33,13 @@ Item {
         radius: Theme.radius
         color: {
             if (root.isPrimary)
-                return hover.hovered ? Qt.lighter(root.effectiveAccent, 1.12) : root.effectiveAccent
+                return hover.hovered ? Qt.lighter(root.fill, 1.15) : root.fill
             if (root.isQuiet)
                 return hover.hovered ? Theme.surfaceAlt : "transparent"
             return hover.hovered ? Theme.surfaceAlt : Theme.surface
         }
         border.width: root.isPrimary || root.isQuiet ? 0 : Theme.border
-        border.color: hover.hovered ? root.effectiveAccent : Theme.lineStrong
+        border.color: hover.hovered ? Theme.inkMuted : Theme.lineStrong
 
         Behavior on color { ColorAnimation { duration: Theme.fast } }
         Behavior on border.color { ColorAnimation { duration: Theme.fast } }
@@ -55,7 +57,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             // On a filled button the label sits on the accent, so the mark has
             // to flip to the dark plane to stay readable.
-            color: root.isPrimary ? Theme.base
+            color: root.isPrimary ? Theme.primaryInk
                                   : (hover.hovered ? root.effectiveAccent : Theme.inkMuted)
             Behavior on color { ColorAnimation { duration: Theme.fast } }
         }
@@ -67,7 +69,7 @@ Item {
             font.family: Theme.sansFamily
             font.pixelSize: Theme.sizeBody
             font.weight: root.isPrimary ? Font.DemiBold : Font.Medium
-            color: root.isPrimary ? Theme.base
+            color: root.isPrimary ? Theme.primaryInk
                                   : (hover.hovered ? Theme.ink : Theme.inkMuted)
             Behavior on color { ColorAnimation { duration: Theme.fast } }
         }
@@ -79,7 +81,7 @@ Item {
         visible: root.busy
         height: 2
         width: parent.width * 0.4
-        color: root.isPrimary ? Theme.base : root.effectiveAccent
+        color: root.isPrimary ? Theme.primaryInk : root.effectiveAccent
         anchors.bottom: parent.bottom
         opacity: 0.9
 

@@ -104,7 +104,11 @@ Item {
             model: ListModel {
                 ListElement {
                     question: "How do I connect?"
-                    answer: "On the Vita, open VitaShell and press SELECT to start its FTP server. The screen shows an address and a port — type those into Link and press Connect. Both devices have to be on the same Wi-Fi network. Nothing else is needed, and nothing leaves your network."
+                    answer: "In VitaShell, press START and set the SELECT button to FTP or USB. Close that menu and press SELECT. For FTP, enter the displayed IP address and port on the Connection screen. For USB, choose USB cable in VitaSync; the mounted drive is detected automatically."
+                }
+                ListElement {
+                    question: "Why does USB not detect my Vita?"
+                    answer: "VitaShell must show its USB Connected screen, and the exported drive must appear in your computer's file explorer. VitaSync checks every second while USB mode is selected. If your computer sees the drive but VitaSync misses it, use Select drive manually and choose its root. Use a data cable and select the USB device containing your Vita files in VitaShell. Safely eject the drive before leaving USB mode."
                 }
                 ListElement {
                     question: "Where does a dropped file go?"
@@ -124,7 +128,7 @@ Item {
                 }
                 ListElement {
                     question: "Why is a game marked unmatched?"
-                    answer: "The purple notch means the Title ID was not in the offline database. The name and Title ID shown still come from the package's own param.sfo, so they are correct — only the catalogue entry is missing. Installing works normally."
+                    answer: "The amber marker means the Title ID was not in the offline database. The name and Title ID still come from the package's own param.sfo — only the catalogue entry is missing. Installing works normally."
                 }
                 ListElement {
                     question: "How do I get real box art?"
@@ -163,8 +167,8 @@ Item {
                     answer: "VitaShell's FTP server takes any user name and no real password, so there is normally nothing to store. If you do enter one it is kept in memory for the session and is never written to the settings file."
                 }
                 ListElement {
-                    question: "What does purple mean?"
-                    answer: "Purple marks anything that wants a second look. It is never the only signal, though: an alert also gets a triangle instead of its usual icon, a notched edge instead of a solid one, and the word FAILED where it applies — so the state reads the same whether or not you separate purple from green by eye. Green means it went through, blue is where you are. For the detail behind any of it, open the panel from the icon at the top right of the title bar; it holds the exact exchange with the device."
+                    question: "What do the status colours mean?"
+                    answer: "Green indicates success. Amber marks a warning or error, accompanied by an icon and a readable status. Open the details panel at the top right to inspect the connection log."
                 }
             }
 

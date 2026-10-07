@@ -67,6 +67,7 @@ Window {
             TopBar {
                 id: topBar
                 width: parent.width
+                pageTitle: ["Connection", "Send files", "Files on Vita", "Transfers"][window.currentIndex]
                 onDetailsRequested: details.open = !details.open
             }
 

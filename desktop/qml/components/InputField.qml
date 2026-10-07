@@ -18,6 +18,7 @@ Item {
     property int maximumLength: 255
     property var validator: null
     property alias inputMethodHints: field.inputMethodHints
+    readonly property bool editing: field.activeFocus
 
     /// Height of the label line above the box, or 0 when there is no label.
     readonly property int labelInset: label.length > 0 ? Theme.labelHeight : 0
@@ -40,10 +41,9 @@ Item {
         visible: root.label.length > 0
         text: root.label
         font.family: Theme.sansFamily
-        font.pixelSize: Theme.sizeMicro
-        font.letterSpacing: 1.1
+        font.pixelSize: Theme.sizeSmall
         font.weight: Font.DemiBold
-        color: field.activeFocus ? Theme.blue : Theme.inkFaint
+        color: Theme.inkMuted
         Behavior on color { ColorAnimation { duration: Theme.fast } }
     }
 
@@ -56,9 +56,9 @@ Item {
         color: Theme.surface
         border.width: Theme.border
         border.color: {
-            if (root.showValidity && root.text.length > 0)
-                return root.valid ? Theme.greenDim : Theme.purple
-            return field.activeFocus ? Theme.blue : Theme.line
+            if (root.showValidity && root.text.length > 0 && !root.valid)
+                return Theme.purple
+            return field.activeFocus ? Theme.blue : Theme.lineStrong
         }
 
         Behavior on border.color { ColorAnimation { duration: Theme.fast } }
@@ -71,7 +71,7 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: 1
             anchors.verticalCenter: parent.verticalCenter
-            visible: root.showValidity && root.text.length > 0
+            visible: root.showValidity && root.text.length > 0 && !root.valid
             tone: root.valid ? "ok" : "error"
         }
 

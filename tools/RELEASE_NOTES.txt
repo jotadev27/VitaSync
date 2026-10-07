@@ -1,0 +1,53 @@
+VitaSync 2.0
+Windows 10/11 x64
+
+Send files between your PC and a PS Vita running VitaShell over FTP or USB.
+
+Changes
+- Refreshed graphite interface, clearer navigation, and simpler connection controls.
+- Asynchronous USB detection, automatic single-drive selection, and a manual fallback.
+- Broader Vita storage-layout recognition and Windows USB device identification.
+- Fixed Windows USB file and directory operations; USB exposes one ux0: mount.
+- Successful recent FTP connections preserve both address and port in user settings.
+- Restored the original transparent desktop and taskbar icon.
+- Added Windows test fixtures and regression tests for history and USB scanning.
+
+Install
+Run VitaSync-2.0-Windows-x64-Setup.exe and follow the wizard.
+The installer creates desktop and Start menu shortcuts and an uninstaller.
+
+Portable
+Extract VitaSync-2.0-Windows-x64-Portable.zip completely, then run
+VitaSync/vitasync.exe. Keep all runtime libraries and folders together.
+
+Verify downloads
+Compare the SHA-256 of each downloaded file with SHA256SUMS.txt:
+  Get-FileHash .\VitaSync-2.0-Windows-x64-Setup.exe -Algorithm SHA256
+
+Connect
+FTP: set VitaShell's SELECT button to FTP, press SELECT, then enter the
+displayed address and port in VitaSync.
+USB: set SELECT to USB, select your storage, connect a USB data cable,
+and press SELECT. Choose USB cable in VitaSync and press Connect USB.
+Safely eject USB storage when finished.
+
+Privacy
+No telemetry, cloud account, or automatic update checks. User settings and
+recent connections stay in the user's app configuration directory; they are
+not included in these packages. No personal transfer files are bundled.
+FTP is unencrypted; use a trusted local network.
+
+Validation and limitations
+Core, FTP transport, and mounted-folder USB suites passed. Forty-two
+integration cases passed when run separately, covering history, hotplug
+selection, copying, browsing, and mode switching. The FTP reconnect stress
+case stalled locally and was stopped; the complete integration suite is
+not recorded as passing. Physical PS Vita USB identification and
+abrupt-unplug durability remain hardware checks.
+The packages are not code-signed. Android is not included.
+
+Source and documentation
+https://github.com/jotadev27/VitaSync
+https://github.com/jotadev27/VitaSync/releases
+
+Maintained by jotadev27.

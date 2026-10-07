@@ -1,0 +1,24 @@
+VitaSync Windows runtime dependencies
+
+Qt 6.8.3
+The bundled Qt libraries are dynamically linked. Applicable Qt components
+are distributed under LGPL-3.0 or GPL-3.0 with the Qt GPL exception, as
+specified in their upstream sources. License texts accompany this file.
+Qt source: https://download.qt.io/official_releases/qt/6.8/6.8.3/
+Module source: https://code.qt.io/cgit/qt/
+You may replace the dynamic Qt libraries with compatible modified builds.
+
+MinGW-w64 / GCC runtime
+libgcc and libstdc++ are covered by GPLv3 with the GCC Runtime Library
+Exception. winpthreads uses its upstream permissive license.
+Sources and license terms:
+https://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
+https://www.mingw-w64.org/
+https://github.com/mingw-w64/mingw-w64/blob/master/mingw-w64-libraries/winpthreads/COPYING
+
+zlib
+Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler.
+Source and license: https://zlib.net/zlib_license.html
+
+Other Qt third-party notices are available in each module's source tree
+at the Qt source links above. No application user data is part of this bundle.

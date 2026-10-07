@@ -9,9 +9,10 @@ Rectangle {
 
     signal detailsRequested()
     property bool detailsOpen: false
+    property string pageTitle: "Connection"
 
-    height: 52
-    color: Theme.surface
+    height: 64
+    color: Theme.base
 
     Rectangle {
         anchors.bottom: parent.bottom
@@ -30,12 +31,9 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             font.family: Theme.sansFamily
             font.pixelSize: Theme.sizeTitle
-            font.weight: Font.Bold
-            font.letterSpacing: 2.2
-            textFormat: Text.StyledText
-            // The wordmark's own colour split: cyan VITA, pale SYNC.
-            text: "<font color='" + Theme.blue + "'>VITA</font>"
-                  + "<font color='" + Theme.ink + "'>SYNC</font>"
+            font.weight: Font.DemiBold
+            text: root.pageTitle
+            color: Theme.ink
         }
     }
 

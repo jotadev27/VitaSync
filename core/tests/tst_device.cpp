@@ -16,6 +16,8 @@
 #include <QDir>
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QSettings>
+#include <QThread>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -35,7 +37,7 @@ private:
 
     QString devicePath(const QString &relative) const
     {
-        return m_deviceRoot.path() + QLatin1Char('/') + relative;
+        return MockVitaServer::fixturePath(m_deviceRoot.path(), relative);
     }
 
     /// Unlike devicePath(), no "ux0:" segment: a mounted USB volume's own
@@ -95,14 +97,14 @@ private slots:
         QVERIFY(m_downloadRoot.isValid());
         QVERIFY(m_usbRoot.isValid());
 
-        QDir(m_deviceRoot.path()).mkpath(QStringLiteral("ux0:/vpk"));
-        QDir(m_deviceRoot.path()).mkpath(QStringLiteral("ux0:/video"));
-        QDir(m_deviceRoot.path()).mkpath(QStringLiteral("ux0:/customtheme"));
-        QDir(m_deviceRoot.path()).mkpath(QStringLiteral("ux0:/VitaShell/theme"));
-        QDir(m_deviceRoot.path()).mkpath(QStringLiteral("ux0:/user/00/savedata/PCSE00001/sub"));
-        QDir(m_deviceRoot.path()).mkpath(QStringLiteral("ux0:/picture"));
-        QDir(m_deviceRoot.path()).mkpath(QStringLiteral("ux0:/music"));
-        QDir(m_deviceRoot.path()).mkpath(QStringLiteral("os0:"));
+        QDir().mkpath(devicePath(QStringLiteral("ux0:/vpk")));
+        QDir().mkpath(devicePath(QStringLiteral("ux0:/video")));
+        QDir().mkpath(devicePath(QStringLiteral("ux0:/customtheme")));
+        QDir().mkpath(devicePath(QStringLiteral("ux0:/VitaShell/theme")));
+        QDir().mkpath(devicePath(QStringLiteral("ux0:/user/00/savedata/PCSE00001/sub")));
+        QDir().mkpath(devicePath(QStringLiteral("ux0:/picture")));
+        QDir().mkpath(devicePath(QStringLiteral("ux0:/music")));
+        QDir().mkpath(devicePath(QStringLiteral("os0:")));
 
         QFile clip(devicePath(QStringLiteral("ux0:/video/clip.mp4")));
         QVERIFY(clip.open(QIODevice::WriteOnly));
@@ -160,6 +162,14 @@ private slots:
         QCOMPARE(device.statusTone(), QStringLiteral("ok"));
     }
 
+    void init()
+    {
+        QSettings settings(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+                               + QStringLiteral("/settings.ini"), QSettings::IniFormat);
+        settings.clear();
+        settings.sync();
+    }
+
     void recentHostsRememberThePortAndCanBeCleared()
     {
         // A successful connection is remembered as one host:port pair, not
@@ -191,6 +201,74 @@ private slots:
         QVERIFY(device.recentHosts().isEmpty());
     }
 
+    void recentHostsPersistImmediatelyOutsideTheProject()
+    {
+        VitaDevice device;
+        QVERIFY(connectDevice(&device));
+        const QString expected = QStringLiteral("127.0.0.1:%1").arg(m_server->port());
+        {
+            VitaDevice reopened;
+            QCOMPARE(reopened.host(), QStringLiteral("127.0.0.1"));
+            QCOMPARE(reopened.port(), m_server->port());
+            QVERIFY(reopened.recentHosts().contains(expected));
+        }
+        device.clearRecentHosts();
+        VitaDevice reopened;
+        QVERIFY(reopened.recentHosts().isEmpty());
+    }
+
+    void incompleteEndpointsAreNotRemembered()
+    {
+        {
+            VitaDevice device;
+            QCOMPARE(device.host(), QStringLiteral("127.0.0.1"));
+            device.setHost(QStringLiteral("10.0.0.1"));
+            device.setPort(0);
+            device.connectToVita();
+            QVERIFY(device.recentHosts().isEmpty());
+        }
+        VitaDevice reopened;
+        QCOMPARE(reopened.host(), QStringLiteral("127.0.0.1"));
+        QCOMPARE(reopened.port(), 1337);
+        QVERIFY(reopened.recentHosts().isEmpty());
+    }
+
+    void usbScanDoesNotBlockOrOverlap()
+    {
+        VitaDevice device(nullptr, [] {
+            QThread::msleep(200);
+            return QVector<UsbTransport::Candidate>();
+        });
+        QSignalSpy spy(&device, &VitaDevice::usbScanningChanged);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        device.refreshUsbCandidates();
+        device.refreshUsbCandidates();
+        QVERIFY(elapsed.elapsed() < 100);
+        QVERIFY(device.usbScanning());
+        QCOMPARE(spy.count(), 1);
+        QTRY_VERIFY_WITH_TIMEOUT(!device.usbScanning(), 1000);
+        QCOMPARE(spy.count(), 2);
+    }
+
+    void usbHotplugAutomaticallySelectsAndClearsTheDrive()
+    {
+        const QString root = m_localRoot.filePath(QStringLiteral("hotplug"));
+        VitaDevice device(nullptr, [root] { return UsbTransport::detectCandidates({root}); });
+        device.setConnectionMode(QStringLiteral("usb"));
+        QTRY_VERIFY_WITH_TIMEOUT(!device.usbScanning(), 1000);
+        QVERIFY(device.usbCandidates().isEmpty());
+        QVERIFY(device.usbRootPath().isEmpty());
+        QVERIFY(QDir().mkpath(root + QStringLiteral("/app/VITASHELL")));
+        QTRY_COMPARE_WITH_TIMEOUT(device.usbCandidates().size(), 1, 2500);
+        QCOMPARE(device.usbRootPath(), QDir(root).absolutePath());
+        QVERIFY(QDir(root).removeRecursively());
+        QTRY_VERIFY_WITH_TIMEOUT(device.usbCandidates().isEmpty(), 2500);
+        QVERIFY(device.usbRootPath().isEmpty());
+        device.setUsbRootPath(QString());
+        QVERIFY(device.usbRootPath().isEmpty());
+    }
+
     // --- USB mode ---------------------------------------------------------
     // Same object, same TransferQueue, same install pipeline -- only the
     // transport underneath differs. These mirror the FTP tests above closely
@@ -199,7 +277,10 @@ private slots:
     void usbModeConnectsAndListsTheCard()
     {
         VitaDevice device;
+        device.setMount(QStringLiteral("ur0:"));
         QVERIFY2(connectDeviceUsb(&device), "device never connected over USB");
+        QCOMPARE(device.mount(), QStringLiteral("ux0:"));
+        QCOMPARE(device.mountPoints().size(), 1);
 
         QTRY_VERIFY_WITH_TIMEOUT(device.browser()->rowCount() > 0, 5000);
         QCOMPARE(device.currentPath(), QStringLiteral("/ux0:"));
@@ -1259,7 +1340,9 @@ private slots:
 
         device.navigateTo(QStringLiteral("/ux0:"));
         QTRY_VERIFY_WITH_TIMEOUT(device.currentPath() == QStringLiteral("/ux0:"), 5000);
-        QTest::qWait(120);
+        // The path changes before the asynchronous FTP listing arrives.
+        // Wait for the contents instead of assuming a fixed delay is enough.
+        QTRY_VERIFY_WITH_TIMEOUT(listedNames(&device).contains(QStringLiteral("vpk")), 5000);
 
         const QStringList names = listedNames(&device);
         QVERIFY2(names.contains(QStringLiteral("vpk")), qPrintable(names.join(", ")));

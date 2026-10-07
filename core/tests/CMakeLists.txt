@@ -40,3 +40,8 @@ qt_add_executable(mockvita
     MockVitaServer.cpp
 )
 target_link_libraries(mockvita PRIVATE vsp_core Qt6::Network)
+
+# Qt's Windows default is a GUI subsystem executable; tests and the mock
+# server need stdout so CTest and command-line diagnostics remain readable.
+set_target_properties(tst_core tst_transport tst_usb tst_device mockvita
+    PROPERTIES WIN32_EXECUTABLE FALSE)

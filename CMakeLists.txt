@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(VitaSync
-    VERSION 1.0.0
+    VERSION 2.0.0
     DESCRIPTION "Local-network companion suite for a jailbroken PS Vita"
     LANGUAGES CXX)
 
@@ -21,7 +21,7 @@ option(VSP_BUILD_TESTS "Build the core unit tests" ON)
 # Multimedia is optional: with it, a dropped video previews a real decoded
 # frame; without it, videos get a drawn plate and everything else is unchanged.
 # Declared here rather than in media/ so Qt's target finalisation can see it.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Network Concurrent Quick QuickControls2
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Network Concurrent Quick QuickControls2 Svg
              OPTIONAL_COMPONENTS Multimedia)
 
 qt_standard_project_setup(REQUIRES 6.5)

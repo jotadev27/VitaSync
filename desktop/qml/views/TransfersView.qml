@@ -14,7 +14,7 @@ Item {
 
         SectionLabel {
             width: parent.width
-            text: "QUEUE"
+            text: "Transfer queue"
             accent: Theme.green
             trailing: Device.transfers.activeCount > 0
                       ? Device.transfers.activeCount + " running · " + Device.transfers.pendingCount + " waiting"

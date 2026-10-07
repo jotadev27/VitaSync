@@ -1,9 +1,8 @@
 # How VitaShell's USB mode actually works
 
-CLAUDE.md asked that this be confirmed rather than assumed, the same way
-[install-trigger.md](install-trigger.md) and [themes.md](themes.md) were. It
-was, against VitaShell's own source, and the answer shapes the whole USB
-implementation, so it is written down here.
+This behavior was checked against VitaShell source, alongside
+[install-trigger.md](install-trigger.md) and [themes.md](themes.md).
+The result determines how the USB transport works.
 
 ## The short version
 
@@ -65,25 +64,19 @@ same menu, not simultaneous options — confirmed by `stopUsb()` restarting the
 MTP driver and remounting the internal partitions on exit, which only makes
 sense if nothing else was using them at the same time.
 
-## Scope decision: Memory Card mode only
+## Exported user storage
 
-VitaSync's USB support targets the **default "Memory Card" USB mode**
-only — the one whose exported partition's root matches `ux0:`'s FTP-visible
-layout, which is what every other feature in this app (the VPK staging
-folder, the video/photo/theme routing in `VitaPaths`, the savedata paths) was
-already written against. Game Card, SD2Vita and PSVSD USB modes export a
-*different* physical partition with a different (or absent) folder layout and
-are out of scope, the same way `.pkg` support is out of scope — not
-attempted, not silently mishandled. `UsbTransport` maps every path it is
-asked for through a single `ux0:` prefix; anything else is refused with a
-clear message rather than guessed at.
+VitaSync maps the root of the selected exported drive to `ux0:`. Memory Card
+and SD2Vita user-storage layouts can be recognised; choose the USB device in
+VitaShell that actually contains your files. Game Card/raw partitions are not
+installation targets. USB only exposes this one partition, so the mount picker
+offers `ux0:` only; use FTP to access the others. Physical SD2Vita/PSVSD behaviour
+has not been verified by these filesystem tests.
 
 ## What this means for the app
 
 Because USB mode is a real, host-mounted filesystem and not a protocol, the
-question CLAUDE.md asked — "can the existing core logic run unmodified
-against a mounted path, or does it need a separate transport?" — has a
-two-part answer:
+question of reusing the core against a mounted path has a two-part answer:
 
 - **Identification, routing, VPK/folder install and theme install all run
   completely unmodified.** None of `PackageInspector`, `ThemeReader`,
@@ -137,21 +130,27 @@ even though the underlying work is just local file I/O:
 
 ### Detecting a Vita among the OS's mounted drives
 
-There is no USB descriptor string worth trusting here — `sceUsbstorVStorSetDeviceInfo("\"PS Vita\" MC", "1.00")`
-sets a SCSI vendor/product string, but nothing in this app's environment has
-easy portable access to raw SCSI descriptors, and relying on it would fail
-silently on any host that normalises or hides it. Instead, `UsbTransport::looksLikeVitaVolume()`
-looks at the mounted filesystem's *contents*: every Vita memory card carries
-an `id.dat` file written by the Vita's own OS, and pairing that with a
-VitaShell install folder (`VitaShell/` or `app/VITASHELL/`, present on
-essentially every jailbroken card, since VitaShell is what exposes USB mode
-in the first place) is specific enough that an unrelated USB drive is very
-unlikely to match both. `refreshUsbCandidates()` scans `QStorageInfo::mountedVolumes()`
-for this signature; a folder that does not match can still be pointed at
-manually (the same "advanced override" pattern the app already uses for
-video-folder routing), and is clearly labelled unverified rather than
-refused — the same philosophy `MetadataDb` uses for an unmatched title: a
-wrong guess should be visible, not fatal.
+`refreshUsbCandidates()` scans mounted volumes on a worker thread at startup,
+and every second while USB is selected and disconnected. Concurrent scans are
+coalesced. A sole candidate is selected automatically; a disappeared automatic
+selection is cleared. Manual selections are preserved. The system root is
+excluded; Windows also excludes network and non-storage drives.
+
+Windows reads `STORAGE_DEVICE_DESCRIPTOR` via `IOCTL_STORAGE_QUERY_PROPERTY`:
+VitaShell advertises `"PS Vita" MC`, so even a nearly empty mounted card can
+be recognised without admin rights. When this descriptor is unavailable, all
+platforms use these filesystem signatures:
+
+- `VitaShell/` or `app/VITASHELL/`;
+- `id.dat` plus at least two of `app/`, `appmeta/`, `license/app/`,
+  `user/00/savedata/`;
+- `app/` and `appmeta/` plus `license/app/` or `user/00/savedata/`, even
+  without `id.dat` (for example, SD2Vita user storage).
+
+An ordinary drive or `id.dat` alone does not match. Metadata is cached during
+the scan, so QML does not repeatedly probe the filesystem while rendering.
+An unmatched folder can still be selected manually and is labelled unverified.
+The OS must mount the drive first; the app cannot replace a missing USB mount.
 
 ### Mid-transfer disconnect
 
@@ -171,9 +170,8 @@ versus a merely-missing file — is exercised in `core/tests/tst_usb.cpp`
 (`aMissingSubfolderFailsWithoutClaimingTheVolumeIsGone`); the reverse case,
 an OS actually tearing down a mounted volume mid-request, needs a real
 mount/unmount this sandboxed environment cannot perform, so it is
-watched-but-not-unit-tested, the same status CLAUDE.md already records for
-the one FTP disconnect report that could not be reproduced against
-`MockVitaServer`.
+not yet verified with a physical mount/unmount. The FTP disconnect report
+also could not be reproduced against `MockVitaServer`.
 
 The `QStorageInfo` check itself runs on a worker thread (`checkMountAsync()`),
 never the GUI thread — see "First hardware pass" below for why that matters
@@ -281,7 +279,7 @@ write behaved.
 **Fix:** `syncFile()` (new, in `UsbTransport.cpp`) calls `flush()` and then
 `fsync()` on the raw file descriptor (`FlushFileBuffers` on the native
 handle on Windows) before a copy is allowed to report success, in
-`runCopyFile()`. A newly created file or directory is also a change to its
+`runCopyFile()`. On Unix, a newly created file or directory is also a change to its
 *parent* directory's own entries — separate metadata that `fsync`-ing the
 file itself does not cover, and which exFAT/FAT drivers (what a Vita card
 almost always is) commonly do not journal the way a modern desktop
@@ -290,7 +288,14 @@ folder, in both `runCopyFile()` and `runMkdir()`. Any sync failure is
 reported as a job failure, not silently ignored: the whole point is that the
 app must not say "done" until the bytes actually are.
 
-This trades some upload speed for the guarantee that "done" is true — an
+On Windows the previous directory flush used a read-only handle, which made
+successful uploads and directory creation report failure. `FlushFileBuffers`
+requires write access; Windows has no unprivileged directory `fsync` equivalent.
+The Windows implementation now retains file flushing and lets the OS manage
+directory metadata. Safely eject the drive before exiting VitaShell USB mode;
+the app does not promise durability after an abrupt unplug.
+
+This trades some upload speed for stronger file durability — an
 `fsync` per file (and per newly created directory) is not free, especially
 against a real, slower USB device, but the alternative is exactly the bug
 that was reported.
@@ -303,9 +308,7 @@ mkdir tests (`tst_usb.cpp`, and the folder-install tests in `tst_device.cpp`)
 confirm the added `fsync`/`FlushFileBuffers` calls do not break normal
 operation and that data still round-trips correctly; only a real console,
 with the cable pulled immediately after a reported success, can confirm the
-data survives. Flagging this the same way CLAUDE.md already flags the one
-FTP disconnect report that could not be reproduced: implemented and
-reasoned through, not yet field-proven on this specific claim.
+data survives. This durability claim remains unverified on physical hardware.
 
 ## What was and wasn't verified
 
@@ -326,4 +329,6 @@ mid-transfer unplug.
 - [VitaShell — `usb.h`](https://github.com/TheOfficialFloW/VitaShell/blob/master/usb.h)
 - [VitaShell — `main.c`](https://github.com/TheOfficialFloW/VitaShell/blob/master/main.c) (`initUsb()`, `dialogSteps()`)
 - [VitaShell — README](https://github.com/TheOfficialFloW/VitaShell/blob/master/README.md)
+- [Windows storage descriptor](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ns-winioctl-storage_device_descriptor)
+- [Windows FlushFileBuffers](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers)
 - [USB mass storage device class — Wikipedia](https://en.wikipedia.org/wiki/USB_mass_storage_device_class)

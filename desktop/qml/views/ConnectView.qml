@@ -1,361 +1,412 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Dialogs
 import VitaSync
 import VitaSync.Ui
 import "../components"
 
-// Link: the address, the port, and the state of the line. Two fields, one
-// button, and whatever the device told us about itself once it answers.
 Item {
     id: root
-
-    readonly property bool ipLooksValid: Device.hostValid
-
-    Column {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.margins: Theme.gapLarge * 1.4
-        spacing: Theme.gapLarge
-
-        SectionLabel {
-            width: parent.width
-            text: "DEVICE"
-            accent: Theme.blue
-            trailing: Device.connected ? "linked" : "offline"
+    property bool manualUsb: false
+    Connections {
+        target: Device
+        function onConnectionInfoChanged() {
+            if (!hostField.editing) hostField.text = Device.host
+            if (!portField.editing) portField.text = Device.port.toString()
         }
-
-        // Two independent ways to reach the same device. Picking one never
-        // disables the other -- switching just drops whichever link is live,
-        // the same as pressing Disconnect first.
-        Row {
-            spacing: 6
-
-            Chip {
-                text: "WI-FI"
-                iconName: "link"
-                selected: Device.connectionMode === "ftp"
-                onClicked: Device.connectionMode = "ftp"
-            }
-            Chip {
-                text: "USB"
-                iconName: "usb"
-                selected: Device.connectionMode === "usb"
-                onClicked: {
-                    Device.connectionMode = "usb"
-                    Device.refreshUsbCandidates()
-                }
-            }
+        function onUsbRootPathChanged() { usbField.text = Device.usbRootPathDisplay }
+        function onSettingsChanged() {
+            downloadField.text = Device.downloadDirDisplay
+            coverField.text = Device.coverPackPathDisplay
         }
-
-        // The address row. Both boxes are the same component at the same
-        // height, so they line up by construction rather than by eye.
-        Row {
-            visible: Device.connectionMode === "ftp"
-            spacing: Theme.gap
-
-            InputField {
-                id: hostField
-                width: 250
-                label: "IP ADDRESS"
-                placeholder: "192.168.0.00"
-                text: Device.host
-                showValidity: true
-                valid: root.ipLooksValid || Device.host.length === 0
-                    ? Device.hostValid || Device.host.length === 0
-                    : false
-                inputMethodHints: Qt.ImhPreferNumbers
-                onEdited: function (value) { Device.host = value }
-                onAccepted: if (Device.hostValid) Device.connectToVita()
-            }
-
-            InputField {
-                id: portField
-                width: 110
-                label: "PORT"
-                placeholder: "1337"
-                text: Device.port.toString()
-                showValidity: true
-                valid: Device.port > 0 && Device.port <= 65535
-                validator: IntValidator { bottom: 1; top: 65535 }
-                inputMethodHints: Qt.ImhDigitsOnly
-                onEdited: function (value) { Device.port = parseInt(value) || 0 }
-                onAccepted: if (Device.hostValid) Device.connectToVita()
-            }
-
-            AppButton {
-                y: hostField.controlY
-                text: Device.connected ? "Disconnect" : "Connect"
-                iconName: Device.connected ? "power" : "link"
-                variant: Device.connected ? "secondary" : "primary"
-                accent: Device.connected ? Theme.purple : Theme.blue
-                enabled: Device.connected || Device.hostValid
-                busy: Device.connecting
-                onClicked: Device.connected ? Device.disconnectFromVita() : Device.connectToVita()
-            }
-        }
-
-        // Recent addresses, one tap to reuse. Each entry is "host:port", so
-        // picking one restores the port it actually worked on too, not just
-        // the bare IP.
-        Row {
-            visible: Device.connectionMode === "ftp" && Device.recentHosts.length > 0
-            spacing: 6
-
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text: "RECENT"
-                font.family: Theme.sansFamily
-                font.pixelSize: Theme.sizeMicro
-                font.weight: Font.Bold
-                font.letterSpacing: 1.2
-                color: Theme.inkFaint
-                rightPadding: 6
-            }
-
-            Repeater {
-                model: Device.recentHosts
-
-                Chip {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: modelData
-                    selected: modelData === (Device.host + ":" + Device.port)
-                    onClicked: {
-                        Device.selectRecentHost(modelData)
-                        // Property assignment, not a binding: these fields
-                        // need this explicit push after an imperative change,
-                        // the same as every other "pick a recent value" spot.
-                        hostField.text = Device.host
-                        portField.text = Device.port.toString()
-                    }
-                }
-            }
-
-            // Only worth offering once the list is actually long enough to
-            // want tidying -- not on every session with one or two entries.
-            Chip {
-                anchors.verticalCenter: parent.verticalCenter
-                visible: Device.recentHosts.length > 5
-                text: "Clean"
-                iconName: "trash"
-                accent: Theme.purple
-                onClicked: Device.clearRecentHosts()
-            }
-        }
-
-        // USB: no address to type -- VitaShell's USB mode hands the card to
-        // the OS as a normal drive, so connecting is picking which mounted
-        // volume is the Vita. See docs/usb.md.
+    }
+    ScrollView {
+        id: scroll
+        anchors.fill: parent
+        padding: 32
+        clip: true
+        contentWidth: availableWidth
+        contentHeight: layout.implicitHeight
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         Column {
-            width: parent.width
-            visible: Device.connectionMode === "usb"
-            spacing: Theme.gap
-
-            Row {
-                spacing: Theme.gap
-
-                AppButton {
-                    text: "Scan"
-                    iconName: "refresh"
-                    onClicked: Device.refreshUsbCandidates()
-                }
-
-                AppButton {
-                    text: Device.connected ? "Disconnect" : "Connect"
-                    iconName: Device.connected ? "power" : "usb"
-                    variant: Device.connected ? "secondary" : "primary"
-                    accent: Device.connected ? Theme.purple : Theme.blue
-                    enabled: Device.connected || Device.usbRootPath.length > 0
-                        || Device.usbCandidates.length > 0
-                    busy: Device.connecting
-                    onClicked: Device.connected ? Device.disconnectFromVita() : Device.connectUsb()
-                }
-            }
-
-            // Detected volumes: id.dat plus a VitaShell install folder, which
-            // is what tells a Vita card apart from an unrelated USB drive.
-            Row {
-                visible: Device.usbCandidates.length > 0
-                spacing: 6
-
-                Repeater {
-                    model: Device.usbCandidates
-
-                    Chip {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: modelData.label + " · " + modelData.sizeText
-                        iconName: modelData.verified ? "check" : "alert"
-                        accent: modelData.verified ? Theme.green : Theme.purple
-                        selected: modelData.rootPath === Device.usbRootPath
-                        onClicked: Device.usbRootPath = modelData.rootPath
-                    }
-                }
-            }
-
-            EmptyState {
-                width: parent.width
-                visible: Device.usbCandidates.length === 0
-                iconName: "usb"
-                text: "No Vita found — pick USB in VitaShell, then Scan"
-            }
-
-            // Manual override for a volume the scan missed -- same pattern as
-            // pointing the app at a cover-pack or download folder below.
-            Row {
-                spacing: Theme.gap
-
-                InputField {
-                    id: usbField
-                    width: 380
-                    label: "USB VOLUME (MANUAL)"
-                    placeholder: "the mounted drive, if Scan found nothing"
-                    text: Device.usbRootPathDisplay
-                    onEdited: function (value) { Device.usbRootPath = value }
-                }
-
-                AppButton {
-                    y: usbField.controlY
-                    iconName: "folder"
-                    text: "Browse"
-                    onClicked: usbDialog.open()
-                }
-            }
-        }
-
-        // Once linked: what answered, and what it can do.
-        Rectangle {
-            width: parent.width
-            height: Device.connected ? deviceInfo.implicitHeight + 2 * Theme.pad : 0
-            visible: Device.connected
-            radius: Theme.radius
-            color: Theme.surface
-            border.width: Theme.border
-            border.color: Theme.line
-            clip: true
-
-            Rectangle {
-                width: 2
-                height: parent.height
-                color: Theme.green
-            }
-
+            id: layout
+            width: Math.min(scroll.availableWidth, 820)
+            spacing: 28
             Column {
-                id: deviceInfo
-                anchors.left: parent.left
-                anchors.leftMargin: Theme.pad + 4
-                anchors.right: parent.right
-                anchors.rightMargin: Theme.pad
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 7
-
-                Row {
-                    spacing: 8
-
-                    Icon {
-                        anchors.verticalCenter: parent.verticalCenter
-                        name: "vita"
-                        size: 16
-                        color: Theme.green
-                    }
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: Device.deviceLabel
-                        font.family: Theme.monoFamily
-                        font.pixelSize: Theme.sizeBody
-                        color: Theme.ink
-                        elide: Text.ElideRight
-                        width: Math.min(implicitWidth, deviceInfo.width - 40)
-                    }
+                width: parent.width
+                spacing: 8
+                Text {
+                    text: "Connect your PS Vita"
+                    color: Theme.ink
+                    font.family: Theme.sansFamily
+                    font.pixelSize: Theme.sizeDisplay
+                    font.weight: Font.DemiBold
                 }
-
-                Row {
-                    spacing: 6
-
-                    Repeater {
-                        model: Device.mountPoints
-
-                        Chip {
-                            text: modelData.mount
-                            iconName: modelData.iconName
-                            selected: Device.mount === modelData.mount
-                            onClicked: Device.mount = modelData.mount
+                Text {
+                    width: parent.width
+                    text: "Open VitaShell, choose FTP or USB in START, then press SELECT."
+                    color: Theme.inkMuted
+                    font.family: Theme.sansFamily
+                    font.pixelSize: Theme.sizeBody
+                    wrapMode: Text.WordWrap
+                }
+            }
+            Rectangle {
+                width: parent.width
+                height: connection.implicitHeight + 48
+                color: Theme.surface
+                radius: 10
+                border.color: Theme.line
+                Column {
+                    id: connection
+                    x: 24
+                    y: 24
+                    width: parent.width - 48
+                    spacing: 24
+                    Row {
+                        spacing: 8
+                        AppButton {
+                            text: "Wi-Fi / FTP"
+                            iconName: "wifi"
+                            accent: Theme.inkMuted
+                            variant: Device.connectionMode === "ftp" ? "primary" : "quiet"
+                            onClicked: Device.connectionMode = "ftp"
+                        }
+                        AppButton {
+                            text: "USB cable"
+                            iconName: "usb"
+                            accent: Theme.inkMuted
+                            variant: Device.connectionMode === "usb" ? "primary" : "quiet"
+                            onClicked: Device.connectionMode = "usb"
+                        }
+                    }
+                    Column {
+                        visible: Device.connectionMode === "ftp"
+                        width: parent.width
+                        spacing: 18
+                        Text {
+                            width: parent.width
+                            text: "Enter the address shown in VitaShell. Both devices must use the same network."
+                            color: Theme.inkMuted
+                            font.family: Theme.sansFamily
+                            font.pixelSize: Theme.sizeSmall
+                            wrapMode: Text.WordWrap
+                        }
+                        Row {
+                            width: parent.width
+                            spacing: 12
+                            InputField {
+                                id: hostField
+                                width: parent.width - portField.width - ftpConnect.width - 24
+                                label: "IP address"
+                                placeholder: "127.0.0.1"
+                                text: Device.host
+                                showValidity: true
+                                valid: Device.hostValid || Device.host.length === 0
+                                enabled: !Device.connected && !Device.connecting
+                                inputMethodHints: Qt.ImhPreferNumbers
+                                onEdited: function(value) { Device.host = value }
+                                onAccepted: if (Device.hostValid && !Device.connecting) Device.connectToVita()
+                            }
+                            InputField {
+                                id: portField
+                                width: 90
+                                label: "Port"
+                                text: Device.port.toString()
+                                placeholder: "1337"
+                                showValidity: true
+                                valid: Device.port > 0 && Device.port <= 65535
+                                enabled: !Device.connected && !Device.connecting
+                                validator: IntValidator { bottom: 1; top: 65535 }
+                                inputMethodHints: Qt.ImhDigitsOnly
+                                onEdited: function(value) { Device.port = parseInt(value) || 0 }
+                                onAccepted: if (Device.hostValid && !Device.connecting) Device.connectToVita()
+                            }
+                            AppButton {
+                                id: ftpConnect
+                                y: hostField.controlY
+                                text: Device.connected ? "Disconnect" : (Device.connecting ? "Cancel" : "Connect")
+                                iconName: Device.connected || Device.connecting ? "power" : "link"
+                                variant: Device.connected || Device.connecting ? "secondary" : "primary"
+                                enabled: Device.connected || Device.connecting || Device.hostValid
+                                busy: Device.connecting
+                                onClicked: Device.connected || Device.connecting ? Device.disconnectFromVita() : Device.connectToVita()
+                            }
+                        }
+                        Column {
+                            visible: Device.recentHosts.length > 0
+                            width: parent.width
+                            spacing: 8
+                            Row {
+                                width: parent.width
+                                Text {
+                                    width: parent.width - clearRecent.width
+                                    text: "Recent connections"
+                                    color: Theme.inkMuted
+                                    font.family: Theme.sansFamily
+                                    font.pixelSize: Theme.sizeSmall
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                AppButton {
+                                    id: clearRecent
+                                    text: "Clear"
+                                    variant: "quiet"
+                                    onClicked: Device.clearRecentHosts()
+                                }
+                            }
+                            Flow {
+                                width: parent.width
+                                spacing: 8
+                                enabled: !Device.connected && !Device.connecting
+                                Repeater {
+                                    model: Device.recentHosts
+                                    Chip {
+                                        text: modelData
+                                        selected: modelData === Device.host + ":" + Device.port
+                                        onClicked: {
+                                            Device.selectRecentHost(modelData)
+                                            hostField.text = Device.host
+                                            portField.text = Device.port.toString()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Column {
+                        visible: Device.connectionMode === "usb"
+                        width: parent.width
+                        spacing: 16
+                        Row {
+                            width: parent.width
+                            spacing: 12
+                            Icon {
+                                name: Device.usbCandidates.length > 0 ? "check" : "usb"
+                                size: 24
+                                color: Device.usbCandidates.length > 0 ? Theme.green : Theme.inkMuted
+                            }
+                            Column {
+                                width: parent.width - 36
+                                spacing: 6
+                                Text {
+                                    width: parent.width
+                                    text: Device.connected ? "Vita connected over USB"
+                                        : (Device.usbCandidates.length > 0 ? "Vita storage detected" : "Waiting for Vita storage…")
+                                    color: Theme.ink
+                                    font.family: Theme.sansFamily
+                                    font.pixelSize: Theme.sizeBody
+                                    font.weight: Font.DemiBold
+                                    wrapMode: Text.WordWrap
+                                }
+                                Text {
+                                    width: parent.width
+                                    text: "With USB selected in VitaShell, press SELECT. Your drive will appear here automatically."
+                                    color: Theme.inkMuted
+                                    font.family: Theme.sansFamily
+                                    font.pixelSize: Theme.sizeSmall
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+                        }
+                        Repeater {
+                            model: Device.usbCandidates
+                            Rectangle {
+                                width: connection.width
+                                height: 64
+                                radius: Theme.radius
+                                color: modelData.rootPath === Device.usbRootPath ? Theme.surfaceAlt : "transparent"
+                                border.color: modelData.rootPath === Device.usbRootPath ? Theme.lineStrong : Theme.line
+                                Icon {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 14
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    name: "card"
+                                    size: 22
+                                }
+                                Column {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 50
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width - 94
+                                    spacing: 4
+                                    Text {
+                                        width: parent.width
+                                        text: modelData.label + "  ·  " + modelData.rootPath
+                                        color: Theme.ink
+                                        font.family: Theme.sansFamily
+                                        font.pixelSize: Theme.sizeBody
+                                        elide: Text.ElideMiddle
+                                    }
+                                    Text {
+                                        text: modelData.freeText + " free of " + modelData.sizeText
+                                        color: Theme.inkMuted
+                                        font.family: Theme.sansFamily
+                                        font.pixelSize: Theme.sizeSmall
+                                    }
+                                }
+                                Icon {
+                                    visible: modelData.rootPath === Device.usbRootPath
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 14
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    name: "check"
+                                    color: Theme.green
+                                    size: 18
+                                }
+                                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                                TapHandler { enabled: !Device.connected; onTapped: Device.usbRootPath = modelData.rootPath }
+                            }
+                        }
+                        Text {
+                            width: parent.width
+                            visible: Device.usbCandidates.length === 0 && !Device.connected
+                            text: "If the drive also fails to appear in your file explorer, check the USB cable and the USB device selected in VitaShell."
+                            color: Theme.inkFaint
+                            font.family: Theme.sansFamily
+                            font.pixelSize: Theme.sizeSmall
+                            wrapMode: Text.WordWrap
+                        }
+                        Row {
+                            spacing: 8
+                            AppButton {
+                                text: Device.connected ? "Disconnect" : "Connect USB"
+                                iconName: Device.connected ? "power" : "usb"
+                                variant: Device.connected ? "secondary" : "primary"
+                                onClicked: Device.connected ? Device.disconnectFromVita() : Device.connectUsb()
+                            }
+                            AppButton {
+                                text: "Rescan"
+                                iconName: "refresh"
+                                busy: Device.usbScanning
+                                enabled: !Device.usbScanning && !Device.connected
+                                onClicked: Device.refreshUsbCandidates()
+                            }
+                            AppButton {
+                                text: root.manualUsb ? "Hide manual selection" : "Select drive manually"
+                                variant: "quiet"
+                                onClicked: root.manualUsb = !root.manualUsb
+                            }
+                        }
+                        Row {
+                            visible: root.manualUsb
+                            width: parent.width
+                            spacing: 12
+                            InputField {
+                                id: usbField
+                                width: parent.width - usbBrowse.width - 12
+                                label: "Vita drive"
+                                placeholder: "Drive root, for example E:/"
+                                text: Device.usbRootPathDisplay
+                                enabled: !Device.connected
+                                onEdited: function(value) { Device.usbRootPath = value }
+                            }
+                            AppButton {
+                                id: usbBrowse
+                                y: usbField.controlY
+                                text: "Browse"
+                                iconName: "folder"
+                                enabled: !Device.connected
+                                onClicked: usbDialog.open()
+                            }
+                        }
+                    }
+                    Column {
+                        visible: Device.connected
+                        width: parent.width
+                        spacing: 12
+                        Text {
+                            width: parent.width
+                            text: Device.deviceLabel
+                            color: Theme.green
+                            font.family: Theme.sansFamily
+                            font.pixelSize: Theme.sizeBody
+                            elide: Text.ElideRight
+                        }
+                        Flow {
+                            width: parent.width
+                            spacing: 8
+                            Repeater {
+                                model: Device.mountPoints
+                                Chip {
+                                    text: modelData.mount
+                                    iconName: modelData.iconName
+                                    selected: Device.mount === modelData.mount
+                                    onClicked: Device.mount = modelData.mount
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-
-        SectionLabel {
-            width: parent.width
-            text: "LIBRARY"
-            accent: Theme.green
-            trailing: Device.metadata.titleCount + " titles · " + Device.metadata.coverCount + " covers"
-        }
-
-        // Cover pack: the only way art gets into an app that never goes online.
-        Row {
-            spacing: Theme.gap
-
-            InputField {
-                id: coverField
-                width: 380
-                label: "COVER PACK FOLDER"
-                placeholder: "folder of TITLEID.png"
-                text: Device.coverPackPathDisplay
-                onEdited: function (value) { Device.coverPackPath = value }
-            }
-
-            AppButton {
-                y: coverField.controlY
-                iconName: "folder"
-                text: "Browse"
-                onClicked: coverDialog.open()
-            }
-        }
-
-        Row {
-            spacing: Theme.gap
-
-            InputField {
-                id: downloadField
-                width: 380
-                label: "DOWNLOAD FOLDER"
-                placeholder: "where files from the Vita land"
-                text: Device.downloadDirDisplay
-                onEdited: function (value) { Device.downloadDir = value }
-            }
-
-            AppButton {
-                y: downloadField.controlY
-                iconName: "download"
-                text: "Browse"
-                onClicked: downloadDialog.open()
+            Column {
+                width: parent.width
+                spacing: 20
+                SectionLabel {
+                    width: parent.width
+                    text: "Local folders"
+                    trailing: Device.metadata.titleCount + " titles in the offline library"
+                }
+                Row {
+                    width: parent.width
+                    spacing: 12
+                    InputField {
+                        id: downloadField
+                        width: parent.width - downloadBrowse.width - 12
+                        label: "Save files downloaded from your Vita"
+                        text: Device.downloadDirDisplay
+                        onEdited: function(value) { Device.downloadDir = value }
+                    }
+                    AppButton {
+                        id: downloadBrowse
+                        y: downloadField.controlY
+                        text: "Browse"
+                        iconName: "folder"
+                        onClicked: downloadDialog.open()
+                    }
+                }
+                Row {
+                    width: parent.width
+                    spacing: 12
+                    InputField {
+                        id: coverField
+                        width: parent.width - coverBrowse.width - 12
+                        label: "Cover artwork (optional)"
+                        placeholder: "Folder containing TITLEID.png images"
+                        text: Device.coverPackPathDisplay
+                        onEdited: function(value) { Device.coverPackPath = value }
+                    }
+                    AppButton {
+                        id: coverBrowse
+                        y: coverField.controlY
+                        text: "Browse"
+                        iconName: "folder"
+                        onClicked: coverDialog.open()
+                    }
+                }
+                Text {
+                    width: parent.width
+                    text: "Recent connections are saved on this computer after a successful connection."
+                    color: Theme.inkFaint
+                    font.family: Theme.sansFamily
+                    font.pixelSize: Theme.sizeSmall
+                    wrapMode: Text.WordWrap
+                }
             }
         }
     }
-
-    FolderDialog {
-        id: coverDialog
-        title: "Select cover pack folder"
-        onAccepted: {
-            Device.coverPackPath = selectedFolder
-            coverField.text = Device.coverPackPathDisplay
-        }
-    }
-
-    FolderDialog {
-        id: downloadDialog
-        title: "Select download folder"
-        onAccepted: Device.downloadDir = selectedFolder
-    }
-
     FolderDialog {
         id: usbDialog
-        title: "Select the Vita's mounted USB volume"
-        onAccepted: {
-            Device.usbRootPath = selectedFolder
-            usbField.text = Device.usbRootPathDisplay
-        }
+        title: "Select the root of the Vita USB drive"
+        onAccepted: Device.usbRootPath = selectedFolder
+    }
+    FolderDialog {
+        id: coverDialog
+        title: "Select cover artwork folder"
+        onAccepted: Device.coverPackPath = selectedFolder
+    }
+    FolderDialog {
+        id: downloadDialog
+        title: "Choose where to save downloaded files"
+        onAccepted: Device.downloadDir = selectedFolder
     }
 }

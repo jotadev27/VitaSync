@@ -1,7 +1,7 @@
 # How a VPK actually gets installed
 
-CLAUDE.md asked that this be confirmed rather than assumed. It was, and the
-answer shapes the whole Install screen, so it is written down here.
+This behavior was checked against VitaShell source. The result determines
+how VitaSync presents the final installation step.
 
 ## The short version
 

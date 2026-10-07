@@ -77,7 +77,7 @@ private slots:
 
     // --- detection -----------------------------------------------------
 
-    void signatureRequiresBothIdDatAndVitaShell()
+    void signatureRejectsUnrelatedDrives()
     {
         QVERIFY(UsbTransport::looksLikeVitaVolume(m_volumeRoot));
 
@@ -92,6 +92,29 @@ private slots:
         QDir().mkpath(idOnly);
         writeFile(QDir(idOnly).filePath(QStringLiteral("id.dat")), QByteArray(4, '\0'));
         QVERIFY(!UsbTransport::looksLikeVitaVolume(idOnly));
+    }
+
+    void detectsVitaShellWithoutIdDat()
+    {
+        const QString root = QDir(m_workRoot.path()).filePath(QStringLiteral("sd2vita"));
+        QVERIFY(QDir().mkpath(root + QStringLiteral("/app/VITASHELL")));
+        QVERIFY(UsbTransport::looksLikeVitaVolume(root));
+        const auto found = UsbTransport::detectCandidates({root, root + QStringLiteral("/.")});
+        QCOMPARE(found.size(), 1);
+        QVERIFY(found.first().verified);
+    }
+
+    void detectsStorageWhenVitaShellLivesOnAnotherPartition()
+    {
+        const QString root = QDir(m_workRoot.path()).filePath(QStringLiteral("other_partition"));
+        QVERIFY(QDir().mkpath(root + QStringLiteral("/app")));
+        QVERIFY(QDir().mkpath(root + QStringLiteral("/appmeta")));
+        QVERIFY(writeFile(root + QStringLiteral("/id.dat"), QByteArray(32, '\0')));
+        QVERIFY(UsbTransport::looksLikeVitaVolume(root));
+        QVERIFY(QFile::remove(root + QStringLiteral("/id.dat")));
+        QVERIFY(!UsbTransport::looksLikeVitaVolume(root));
+        QVERIFY(QDir().mkpath(root + QStringLiteral("/license/app")));
+        QVERIFY(UsbTransport::looksLikeVitaVolume(root));
     }
 
     void detectCandidatesFindsOnlySignedVolumes()

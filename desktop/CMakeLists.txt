@@ -8,6 +8,10 @@ qt_add_executable(vitasync
     $<$<BOOL:${WIN32}>:vitasync.rc>
 )
 
+# Recompile the Windows resource when the desktop icon changes.
+set_source_files_properties(vitasync.rc PROPERTIES
+    OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/assets/logo/vitasync.ico")
+
 # Must be marked before the module is declared, otherwise the qmldir entry is
 # generated as a plain type and every Theme.* binding silently resolves to
 # undefined.
@@ -18,11 +22,14 @@ set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # resolves to nothing at runtime.
 set_source_files_properties(../assets/logo/appicon_256.png
     PROPERTIES QT_RESOURCE_ALIAS brand/appicon.png)
-# The rail draws its mark at ~30px. The full shield averages into a smear at
-# that size, so the rail gets the knot medallion cut instead -- the same
-# split the .ico uses between its small and large frames.
+# The window and desktop shortcut share the original icon. The navigation
+# rail keeps its separate vector mark.
 set_source_files_properties(../assets/logo/appicon_32.png
     PROPERTIES QT_RESOURCE_ALIAS brand/mark.png)
+set_source_files_properties(../assets/logo/system.svg
+    PROPERTIES QT_RESOURCE_ALIAS brand/system.svg)
+set_source_files_properties(../assets/logo/vitasync.ico
+    PROPERTIES QT_RESOURCE_ALIAS brand/vitasync.ico)
 
 # This module keeps its .qml files in components/ and views/ rather than one
 # flat directory. Qt 6.9 added a policy for exactly that shape: NEW generates
@@ -63,10 +70,12 @@ qt_add_qml_module(vitasync
     RESOURCES
         ../assets/logo/appicon_256.png
         ../assets/logo/appicon_32.png
+        ../assets/logo/system.svg
+        ../assets/logo/vitasync.ico
 )
 
 
-target_link_libraries(vitasync PRIVATE vsp_core vsp_media Qt6::Quick Qt6::QuickControls2)
+target_link_libraries(vitasync PRIVATE vsp_core vsp_media Qt6::Quick Qt6::QuickControls2 Qt6::Svg)
 
 set_target_properties(vitasync PROPERTIES
     WIN32_EXECUTABLE TRUE

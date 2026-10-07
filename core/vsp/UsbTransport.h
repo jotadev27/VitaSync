@@ -42,6 +42,13 @@ public:
         QString label;
         qint64 bytesTotal = 0;
         qint64 bytesFree = 0;
+        bool verified = false;
+        bool operator==(const Candidate &other) const
+        {
+            return rootPath == other.rootPath && label == other.label
+                && bytesTotal == other.bytesTotal && bytesFree == other.bytesFree
+                && verified == other.verified;
+        }
     };
 
     explicit UsbTransport(QObject *parent = nullptr);
@@ -55,8 +62,8 @@ public:
     /// USB device.
     static QVector<Candidate> detectCandidates(const QStringList &rootsToCheck);
 
-    /// True when \a rootPath carries the Vita signature both id.dat and a
-    /// VitaShell install folder. Exposed so the UI can label an unverified
+    /// True when \a rootPath carries VitaShell or a Vita storage layout.
+    /// Exposed so the UI can label an unverified
     /// manual folder pick differently from a confirmed one.
     static bool looksLikeVitaVolume(const QString &rootPath);
 

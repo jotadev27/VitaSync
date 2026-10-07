@@ -25,6 +25,18 @@ public:
     bool listen(quint16 port = 0);
     quint16 port() const;
 
+    /// Vita mount names contain colons, which Windows forbids in directory
+    /// names. Only the mock's local backing paths use the alternate spelling.
+    static QString fixturePath(const QString &root, QString relative)
+    {
+#if defined(Q_OS_WIN)
+        const int colon = relative.indexOf(QLatin1Char(':'));
+        if (colon >= 0)
+            relative.replace(colon, 1, QLatin1String("_"));
+#endif
+        return QDir(root).filePath(relative);
+    }
+
     /// Makes SIZE report a wrong value, to exercise the client's verification.
     void setCorruptSizeReports(bool corrupt) { m_corruptSize = corrupt; }
 

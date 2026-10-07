@@ -46,7 +46,7 @@ Item {
 
         SectionLabel {
             width: parent.width
-            text: "DROP"
+            text: "Add files"
             accent: Theme.blue
             trailing: Device.drops.count > 0
                       ? Device.drops.count + " staged · " + Device.drops.totalSizeText
@@ -68,33 +68,6 @@ Item {
             Behavior on color { ColorAnimation { duration: Theme.fast } }
             Behavior on border.color { ColorAnimation { duration: Theme.fast } }
 
-            // Corner ticks: a deliberate, drawn frame rather than a dashed
-            // rectangle, which is what every drop zone on earth already is.
-            Repeater {
-                model: [[0, 0], [1, 0], [0, 1], [1, 1]]
-
-                Item {
-                    x: modelData[0] === 0 ? 9 : dropPlate.width - 9 - 14
-                    y: modelData[1] === 0 ? 9 : dropPlate.height - 9 - 14
-                    width: 14
-                    height: 14
-                    opacity: dropArea.containsDrag ? 1 : 0.5
-
-                    Rectangle {
-                        width: 14; height: 2
-                        color: dropArea.containsDrag ? Theme.green : Theme.blue
-                        anchors.top: modelData[1] === 0 ? parent.top : undefined
-                        anchors.bottom: modelData[1] === 1 ? parent.bottom : undefined
-                    }
-                    Rectangle {
-                        width: 2; height: 14
-                        color: dropArea.containsDrag ? Theme.green : Theme.blue
-                        anchors.left: modelData[0] === 0 ? parent.left : undefined
-                        anchors.right: modelData[0] === 1 ? parent.right : undefined
-                    }
-                }
-            }
-
             Column {
                 anchors.centerIn: parent
                 spacing: 12
@@ -105,16 +78,15 @@ Item {
                     name: dropArea.containsDrag ? "download" : "package"
                     size: 34
                     weight: 1.3
-                    color: dropArea.containsDrag ? Theme.green : Theme.blue
+                    color: dropArea.containsDrag ? Theme.green : Theme.inkMuted
                 }
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: dropArea.containsDrag ? "RELEASE" : "DROP FILES HERE"
+                    text: dropArea.containsDrag ? "Release to add files" : "Drop games, themes or media here"
                     font.family: Theme.sansFamily
-                    font.pixelSize: Theme.sizeSmall
+                    font.pixelSize: Theme.sizeBody
                     font.weight: Font.DemiBold
-                    font.letterSpacing: 2
                     color: dropArea.containsDrag ? Theme.green : Theme.inkMuted
                 }
 
@@ -269,7 +241,7 @@ Item {
         SectionLabel {
             width: parent.width
             visible: Device.drops.count > 0
-            text: "IDENTIFIED"
+            text: "Ready to send"
             accent: Theme.blue
         }
 

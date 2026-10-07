@@ -82,7 +82,7 @@ QString MockVitaServer::resolve(const QString &remotePath) const
     // The Vita's paths look like "/ux0:/vpk"; map that onto a real directory.
     QString relative = remotePath;
     relative.remove(QRegularExpression(QStringLiteral("^/")));
-    return m_root.filePath(relative);
+    return fixturePath(m_root.absolutePath(), relative);
 }
 
 bool MockVitaServer::vitaPathStats(const QString &remotePath) const
@@ -103,7 +103,7 @@ bool MockVitaServer::vitaPathStats(const QString &remotePath) const
     if (deviceRoot.match(vitaPath).hasMatch())
         return false;
 
-    return QFileInfo::exists(m_root.filePath(vitaPath));
+    return QFileInfo::exists(fixturePath(m_root.absolutePath(), vitaPath));
 }
 
 bool MockVitaServer::resolveForCwd(const QString &current, const QString &argument,
@@ -135,7 +135,7 @@ bool MockVitaServer::resolveForCwd(const QString &current, const QString &argume
         QString vitaPath = candidate.mid(1);
         if (vitaPath.endsWith(QLatin1Char('/')))
             vitaPath.chop(1);
-        if (!QFileInfo(m_root.filePath(vitaPath)).isDir())
+        if (!QFileInfo(fixturePath(m_root.absolutePath(), vitaPath)).isDir())
             return false;
     }
 
@@ -269,7 +269,7 @@ void MockVitaServer::startDataTransfer(QTcpSocket *control)
             QString vitaPath = target.mid(1);
             if (vitaPath.endsWith(QLatin1Char('/')))
                 vitaPath.chop(1);
-            session->data->write(buildListing(m_root.filePath(vitaPath)));
+            session->data->write(buildListing(fixturePath(m_root.absolutePath(), vitaPath)));
         }
         session->data->flush();
         session->data->disconnectFromHost();

@@ -2,211 +2,129 @@ import QtQuick
 import VitaSync
 import VitaSync.Ui
 
-// The left rail: identity at the top, destinations in the middle, and the
-// lightbulb pinned to the bottom corner where it always is.
 Rectangle {
     id: root
-
     property int currentIndex: 0
     property int transferBadge: 0
     property int dropBadge: 0
-    /// Number of failed jobs. Drawn as a triangle rather than a counter box, so
-    /// the rail says "something went wrong" by shape as well as by colour.
     property int alertBadge: 0
     signal navigate(int index)
     signal faqRequested()
-
     width: Theme.railWidth
     color: Theme.surface
 
-    /// Every element in the rail starts on this line. The rail is wide enough
-    /// to name its destinations, so the content is laid out along a left edge
-    /// like a labelled panel, rather than floated in the middle of it.
-    readonly property int inset: Theme.space4
-
     Rectangle {
         anchors.right: parent.right
-        width: Theme.border
+        width: 1
         height: parent.height
         color: Theme.line
     }
-
-    Image {
-        id: mark
-        source: "qrc:/qt/qml/VitaSync/Ui/brand/mark.png"
-        width: 30
-        height: 30
+    Row {
+        id: brand
         anchors.left: parent.left
-        anchors.leftMargin: root.inset
+        anchors.leftMargin: 22
         anchors.top: parent.top
-        anchors.topMargin: Theme.space4
-        smooth: true
-        mipmap: true
+        anchors.topMargin: 25
+        spacing: 10
+        Image {
+            source: "qrc:/qt/qml/VitaSync/Ui/brand/system.svg"
+            width: 32
+            height: 32
+            sourceSize: Qt.size(64, 64)
+            anchors.verticalCenter: parent.verticalCenter
+        }
+        Text {
+            text: "VitaSync"
+            color: Theme.ink
+            font.family: Theme.sansFamily
+            font.pixelSize: 20
+            font.weight: Font.DemiBold
+            anchors.verticalCenter: parent.verticalCenter
+        }
     }
-
-    Rectangle {
-        id: markRule
-        anchors.top: mark.bottom
-        anchors.topMargin: Theme.space4
-        anchors.left: parent.left
-        anchors.leftMargin: root.inset
-        anchors.right: parent.right
-        anchors.rightMargin: root.inset
-        height: Theme.border
-        color: Theme.line
-    }
-
     Column {
-        id: items
-        anchors.top: markRule.bottom
-        anchors.topMargin: Theme.space4
-        width: parent.width
-        spacing: Theme.space1
-
+        anchors.top: brand.bottom
+        anchors.topMargin: 36
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
+        spacing: 4
         Repeater {
             model: [
-                { icon: "link",    label: "Link",     badge: 0 },
-                { icon: "package", label: "Install",  badge: root.dropBadge },
-                { icon: "folder",  label: "Browse",   badge: 0 },
-                { icon: "queue",   label: "Transfer", badge: root.transferBadge }
+                { icon: "vita", label: "Connection", badge: 0 },
+                { icon: "upload", label: "Send files", badge: root.dropBadge },
+                { icon: "folder", label: "Files on Vita", badge: 0 },
+                { icon: "queue", label: "Transfers", badge: root.transferBadge }
             ]
-
-            Item {
-                id: navItem
-                width: root.width
-                height: 44
-
+            Rectangle {
+                id: entry
                 readonly property bool active: root.currentIndex === index
-
-                // Active state is an accent edge plus accent ink -- no filled
-                // pill, no shadow. The edge is the same device the panels use.
-                Rectangle {
-                    anchors.left: parent.left
-                    width: 2
-                    height: parent.height
-                    color: Theme.blue
-                    opacity: navItem.active ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: Theme.fast } }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: Theme.surfaceAlt
-                    opacity: navItem.active ? 1 : (hover.hovered ? 0.6 : 0)
-                    Behavior on opacity { NumberAnimation { duration: Theme.fast } }
-                }
-
+                width: parent.width
+                height: 44
+                radius: Theme.radius
+                color: active ? Theme.raised : (hover.hovered ? Theme.surfaceAlt : "transparent")
                 Row {
                     anchors.left: parent.left
-                    anchors.leftMargin: root.inset
+                    anchors.leftMargin: 14
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: Theme.space3
-
+                    spacing: 12
                     Icon {
-                        anchors.verticalCenter: parent.verticalCenter
                         name: modelData.icon
-                        size: 18
-                        color: navItem.active ? Theme.blue
-                                              : (hover.hovered ? Theme.ink : Theme.inkMuted)
-                        Behavior on color { ColorAnimation { duration: Theme.fast } }
-                    }
-
-                    Text {
+                        size: 19
+                        color: entry.active ? Theme.ink : Theme.inkMuted
                         anchors.verticalCenter: parent.verticalCenter
-                        text: modelData.label
-                        font.family: Theme.sansFamily
-                        font.pixelSize: Theme.sizeSmall
-                        font.weight: navItem.active ? Font.DemiBold : Font.Normal
-                        font.letterSpacing: 0.6
-                        color: navItem.active ? Theme.ink
-                                              : (hover.hovered ? Theme.ink : Theme.inkMuted)
-                        Behavior on color { ColorAnimation { duration: Theme.fast } }
                     }
-                }
-
-                // Normal work: a square counter.
-                Rectangle {
-                    visible: modelData.badge > 0 && !(index === 3 && root.alertBadge > 0)
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.right: parent.right
-                    anchors.rightMargin: root.inset
-                    width: Math.max(15, badgeText.implicitWidth + 8)
-                    height: 15
-                    radius: 2
-                    color: Theme.green
-
                     Text {
-                        id: badgeText
-                        anchors.centerIn: parent
-                        text: modelData.badge
-                        font.family: Theme.monoFamily
-                        font.pixelSize: Theme.sizeMicro
-                        font.weight: Font.Bold
-                        color: Theme.base
+                        text: modelData.label
+                        color: entry.active ? Theme.ink : Theme.inkMuted
+                        font.family: Theme.sansFamily
+                        font.pixelSize: Theme.sizeBody
+                        font.weight: entry.active ? Font.DemiBold : Font.Normal
+                        anchors.verticalCenter: parent.verticalCenter
                     }
                 }
-
-                // Something failed: a triangle, which reads differently from
-                // the counter at a glance and in greyscale.
+                Text {
+                    visible: modelData.badge > 0 && !(index === 3 && root.alertBadge > 0)
+                    text: modelData.badge
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: Theme.inkMuted
+                    font.family: Theme.monoFamily
+                    font.pixelSize: Theme.sizeSmall
+                }
                 Icon {
                     visible: index === 3 && root.alertBadge > 0
-                    anchors.verticalCenter: parent.verticalCenter
                     anchors.right: parent.right
-                    anchors.rightMargin: root.inset
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
                     name: "alert"
-                    size: 15
-                    weight: 2.2
+                    size: 16
                     color: Theme.purple
                 }
-
                 HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
                 TapHandler { onTapped: root.navigate(index) }
             }
         }
     }
-
-    // The lightbulb. The only route to long-form text anywhere in the app.
-    Item {
-        id: bulbButton
-        anchors.bottom: parent.bottom
+    Column {
         anchors.left: parent.left
-        anchors.leftMargin: root.inset
-        anchors.bottomMargin: Theme.space4
-        width: 34
-        height: 34
-
-        Rectangle {
-            anchors.fill: parent
-            radius: Theme.radius
-            color: bulbHover.hovered ? Theme.surfaceAlt : "transparent"
-            border.width: Theme.border
-            border.color: bulbHover.hovered ? Theme.blue : Theme.line
-            Behavior on border.color { ColorAnimation { duration: Theme.fast } }
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 22
+        spacing: 14
+        AppButton {
+            text: "VitaShell help"
+            iconName: "bulb"
+            variant: "quiet"
+            onClicked: root.faqRequested()
         }
-
-        Icon {
-            anchors.centerIn: parent
-            name: "bulb"
-            size: 18
-            color: bulbHover.hovered ? Theme.blue : Theme.inkFaint
-            Behavior on color { ColorAnimation { duration: Theme.fast } }
+        Text {
+            text: "v" + Device.appVersion.replace(/\.0$/, "") + "  ·  jotadev27"
+            color: Theme.inkFaint
+            font.family: Theme.sansFamily
+            font.pixelSize: Theme.sizeMicro
         }
-
-        HoverHandler { id: bulbHover; cursorShape: Qt.PointingHandCursor }
-        TapHandler { onTapped: root.faqRequested() }
-    }
-
-    // A caption, not a block of text -- credit, not a signature that competes
-    // with anything the app is actually trying to say.
-    Text {
-        anchors.left: bulbButton.right
-        anchors.leftMargin: Theme.space2
-        anchors.verticalCenter: bulbButton.verticalCenter
-        text: "Design by jotadev27"
-        font.family: Theme.sansFamily
-        font.pixelSize: Theme.sizeMicro
-        color: Theme.inkFaint
-        elide: Text.ElideRight
-        width: Math.max(0, root.width - bulbButton.x - bulbButton.width - root.inset - Theme.space2)
     }
 }
