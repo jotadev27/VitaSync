@@ -3,12 +3,14 @@
 #include "SfoReader.h"
 #include "ThemeReader.h"
 #include "ZipReader.h"
+#include "ArchiveExtractor.h"
 
 #include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QSet>
 
 #include <algorithm>
 
@@ -29,6 +31,142 @@ const QStringList kMusicExtensions = {
     QStringLiteral("mp3"), QStringLiteral("flac"), QStringLiteral("wav"),
     QStringLiteral("m4a"), QStringLiteral("ogg"), QStringLiteral("aac")
 };
+
+bool mountWrapper(QString name)
+{
+    if (name.endsWith(QLatin1Char(':'))) name.chop(1);
+    return QStringList{QStringLiteral("ux0"), QStringLiteral("uma0"), QStringLiteral("ur0"),
+                       QStringLiteral("imc0"), QStringLiteral("grw0")}.contains(name.toLower());
+}
+
+QString declaredContentRoot(const QString &localPath, bool *merge)
+{
+    const QFileInfo file(localPath);
+    QStringList parts = QDir::fromNativeSeparators(file.absoluteFilePath())
+                            .split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    const bool directory = file.isDir();
+    *merge = false;
+    if (directory && mountWrapper(parts.constLast())) { *merge = true; return QStringLiteral("/"); }
+    for (int i = parts.size() - 2; i >= 0; --i) {
+        if (!mountWrapper(parts.at(i))) continue;
+        QStringList relative = parts.mid(i + 1);
+        if (directory && relative.size() == 1) *merge = true;
+        else relative.removeLast();
+        return relative.isEmpty() ? QStringLiteral("/") : relative.join(QLatin1Char('/'));
+    }
+    if (directory && parts.constLast().compare("user", Qt::CaseInsensitive) == 0
+        && QFileInfo(QDir(localPath).filePath("00/savedata")).isDir()) {
+        *merge = true; return QStringLiteral("user");
+    }
+    for (int i = 0; i < parts.size(); ++i) {
+        const QString name = parts.at(i).toLower();
+        if (name != QLatin1String("data") && name != QLatin1String("savedata")
+            && name != QLatin1String("user")) continue;
+        // user/<account>/savedata is explicit. A random folder named "user"
+        // alone does not establish a Vita layout.
+        if (name == QLatin1String("user") &&
+            !(i + 2 < parts.size() && parts.at(i + 2).compare("savedata", Qt::CaseInsensitive) == 0))
+            continue;
+        QStringList relative = parts.mid(i);
+        if (name == QLatin1String("savedata")) {
+            relative.prepend(QStringLiteral("00"));
+            relative.prepend(QStringLiteral("user"));
+        }
+        if (directory && i == parts.size() - 1) *merge = true;
+        else relative.removeLast();
+        return relative.join(QLatin1Char('/'));
+    }
+    return {};
+}
+
+void applyContentLayout(PackageInfo *info)
+{
+    bool merge = false;
+    const QString declared = declaredContentRoot(info->localPath, &merge);
+    if (declared.isEmpty()) return;
+    info->contentRoot = declared;
+    info->mergeContents = merge;
+    if (!info->contentRoot.isEmpty() && info->localIsDirectory) {
+        info->kind = PackageKind::Folder;
+        info->title = info->fileName;
+        info->titleId.clear();
+        info->themeFolderName.clear();
+    }
+}
+
+void inspectArchiveContents(PackageInfo *info, const QStringList &entries)
+{
+    QStringList files;
+    for (QString entry : entries) {
+        entry.replace(QLatin1Char('\\'), QLatin1Char('/'));
+        if (entry.endsWith(QLatin1Char('/'))) continue;
+        const QStringList parts = entry.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+        if (parts.contains(QStringLiteral("..")) || parts.contains(QStringLiteral("."))
+            || entry.startsWith(QLatin1Char('/'))) {
+            info->error = QStringLiteral("Archive contains unsafe paths"); return;
+        }
+        if (!entry.isEmpty()) files.append(entry);
+    }
+    if (files.isEmpty() || files.size() > 20000) {
+        info->error = QStringLiteral("Archive is empty or contains too many files"); return;
+    }
+    info->kind = PackageKind::Archive;
+    info->mergeContents = true;
+    info->contentRoot = QStringLiteral("/");
+    info->autoRouteContents = true;
+    info->entryCount = files.size();
+    QString prefix;
+    for (int depth = 0; depth < 12; ++depth) {
+        QSet<QString> roots;
+        for (const QString &file : files) roots.insert(file.mid(prefix.size()).section('/', 0, 0));
+        QString wrapper;
+        for (const QString &root : roots) {
+            if (mountWrapper(root)) {
+                if (!wrapper.isEmpty()) {
+                    info->error = QStringLiteral("Archive contains multiple Vita partitions; add one partition at a time"); return;
+                }
+                wrapper = root;
+            }
+        }
+        if (!wrapper.isEmpty()) {
+            info->archivePrefix = prefix + wrapper + QLatin1Char('/');
+            info->autoRouteContents = false;
+            break;
+        }
+        QSet<QString> lowerRoots;
+        for (const QString &root : roots) lowerRoots.insert(root.toLower());
+        if (lowerRoots.contains(QStringLiteral("data")) || lowerRoots.contains(QStringLiteral("user"))
+            || lowerRoots.contains(QStringLiteral("app")) || lowerRoots.contains(QStringLiteral("addcont"))
+            || lowerRoots.contains(QStringLiteral("license")) || lowerRoots.contains(QStringLiteral("video"))
+            || lowerRoots.contains(QStringLiteral("picture")) || lowerRoots.contains(QStringLiteral("music"))) {
+            info->archivePrefix = prefix;
+            info->autoRouteContents = false;
+            break;
+        }
+        if (roots.size() == 1 && roots.cbegin()->compare("savedata", Qt::CaseInsensitive) == 0) {
+            info->archivePrefix = prefix + *roots.cbegin() + QLatin1Char('/');
+            info->contentRoot = QStringLiteral("user/00/savedata");
+            info->autoRouteContents = false;
+            break;
+        }
+        if (roots.size() != 1) break;
+        const QString next = prefix + *roots.cbegin() + QLatin1Char('/');
+        bool allInside = true;
+        for (const QString &file : files) allInside &= file.startsWith(next);
+        if (!allInside) break;
+        prefix = next;
+    }
+    info->valid = true;
+    info->error.clear();
+    if (info->autoRouteContents) {
+        bool merge = false;
+        const QString declared = declaredContentRoot(info->localPath, &merge);
+        if (!declared.isEmpty()) {
+            info->contentRoot = declared;
+            info->autoRouteContents = false;
+        }
+    }
+}
 
 PackageKind kindFromCategory(const QString &category, bool looksRetail)
 {
@@ -99,6 +237,9 @@ QString packageKindLabel(PackageKind kind)
     case PackageKind::Video:    return QStringLiteral("Video");
     case PackageKind::Photo:    return QStringLiteral("Photo");
     case PackageKind::Music:    return QStringLiteral("Music");
+    case PackageKind::Folder:   return QStringLiteral("Folder");
+    case PackageKind::Archive:  return QStringLiteral("Archive");
+    case PackageKind::AndroidApp: return QStringLiteral("Android APK");
     case PackageKind::Unknown:  break;
     }
     return QStringLiteral("File");
@@ -114,11 +255,13 @@ QString PackageInfo::displayName() const
 bool PackageInfo::isDirectoryPayload() const
 {
     return kind == PackageKind::SystemTheme || kind == PackageKind::ShellTheme
-           || kind == PackageKind::FolderGame;
+           || kind == PackageKind::FolderGame || kind == PackageKind::Folder
+           || kind == PackageKind::Archive;
 }
 
 bool PackageInfo::isInstallable() const
 {
+    if (!contentRoot.isEmpty()) return false;
     switch (kind) {
     case PackageKind::Game:
     case PackageKind::Patch:
@@ -142,6 +285,12 @@ PackageKind PackageInspector::kindForExtension(const QString &fileName)
         return PackageKind::Photo;
     if (kMusicExtensions.contains(suffix))
         return PackageKind::Music;
+    if (suffix == QLatin1String("apk"))
+        return PackageKind::AndroidApp;
+    if (QStringList { QStringLiteral("rar"), QStringLiteral("7z"),
+                      QStringLiteral("tar"), QStringLiteral("gz"),
+                      QStringLiteral("bz2"), QStringLiteral("xz") }.contains(suffix))
+        return PackageKind::Archive;
     if (suffix == QLatin1String("vpk") || suffix == QLatin1String("zip"))
         return PackageKind::Unknown;   // needs the archive opened to be sure
     return PackageKind::Unknown;
@@ -161,8 +310,11 @@ PackageInfo PackageInspector::inspect(const QString &localPath)
     info.fileName = fileInfo.fileName();
     info.fileSize = fileInfo.size();
 
-    if (fileInfo.isDir())
-        return inspectFolder(localPath);
+    if (fileInfo.isDir()) {
+        info = inspectFolder(localPath);
+        applyContentLayout(&info);
+        return info;
+    }
 
     if (!fileInfo.exists() || !fileInfo.isFile()) {
         info.error = QStringLiteral("File not found");
@@ -175,6 +327,14 @@ PackageInfo PackageInspector::inspect(const QString &localPath)
 
     const QString suffix = fileInfo.suffix().toLower();
     const PackageKind byExtension = kindForExtension(info.fileName);
+    if (byExtension == PackageKind::Archive) {
+        QString error;
+        const QStringList entries = ArchiveExtractor::entryNames(localPath, &error);
+        if (!error.isEmpty()) { info.error = error; return info; }
+        inspectArchiveContents(&info, entries);
+        return info;
+    }
+    applyContentLayout(&info);
     if (byExtension != PackageKind::Unknown) {
         info.kind = byExtension;
         info.valid = true;
@@ -223,6 +383,12 @@ PackageInfo PackageInspector::inspect(const QString &localPath)
             info.appVersion = sfo.appVersion();
             info.category   = sfo.category();
             info.contentId  = sfo.string(QStringLiteral("CONTENT_ID"));
+            if (suffix == QLatin1String("zip") && info.category == QLatin1String("sd")) {
+                // Savedata is a tree to extract and route, never an installable
+                // application. The upload planner reads its SFO destination.
+                inspectArchiveContents(&info, archive.entryNames());
+                return info;
+            }
             info.kind = kindFromCategory(info.category, looksLikeRetailTitleId(info.titleId));
             info.valid = true;
         } else {
@@ -240,6 +406,8 @@ PackageInfo PackageInspector::inspect(const QString &localPath)
             info.title = fileInfo.completeBaseName();
             info.valid = true;
             info.error.clear();
+        } else if (info.error.isEmpty() && suffix == QLatin1String("zip")) {
+            inspectArchiveContents(&info, archive.entryNames());
         } else if (info.error.isEmpty()) {
             info.error = QStringLiteral("No param.sfo in package");
         }
@@ -254,6 +422,12 @@ PackageInfo PackageInspector::inspect(const QString &localPath)
     }
 
     return info;
+}
+
+bool PackageInspector::hasContentLayout(const QString &localPath)
+{
+    bool merge = false;
+    return !declaredContentRoot(localPath, &merge).isEmpty();
 }
 
 PackageInfo PackageInspector::inspectFolder(const QString &localPath)
@@ -290,16 +464,43 @@ PackageInfo PackageInspector::inspectFolder(const QString &localPath)
     if (info.titleId.isEmpty() && looksLikeRetailTitleId(folder.dirName().toUpper()))
         info.titleId = folder.dirName().toUpper();
 
+    if (info.category == QLatin1String("sd")) {
+        info.kind = PackageKind::Folder;
+        info.contentRoot = QStringLiteral("user/00/savedata");
+        info.title = info.fileName;
+    }
+
     if (info.titleId.isEmpty()) {
-        info.error = QStringLiteral(
-            "No sce_sys/param.sfo, and the folder is not named like a Title ID");
-        return info;
+        info.kind = PackageKind::Folder;
+        info.title = info.fileName;
+        QFile themeXml(folder.filePath(QStringLiteral("theme.xml")));
+        if (themeXml.exists()) {
+            if (!themeXml.open(QIODevice::ReadOnly)) {
+                info.error = QStringLiteral("Cannot read theme.xml");
+                return info;
+            }
+            const ThemeInfo theme = ThemeReader::parseThemeXml(themeXml.read(1024 * 1024));
+            if (!theme.valid) {
+                info.error = theme.error;
+                return info;
+            }
+            info.kind = PackageKind::SystemTheme;
+            info.themeFlavour = ThemeFlavour::SystemTheme;
+            if (!theme.title.isEmpty()) info.title = theme.title;
+            info.provider = theme.provider;
+            info.appVersion = theme.contentVersion;
+        } else if (QFileInfo(folder.filePath(QStringLiteral("colors.txt"))).isFile()) {
+            info.kind = PackageKind::ShellTheme;
+            info.themeFlavour = ThemeFlavour::ShellTheme;
+        }
+        if (info.kind == PackageKind::SystemTheme || info.kind == PackageKind::ShellTheme)
+            info.themeFolderName = info.fileName;
     }
     if (info.title.isEmpty())
         info.title = info.titleId;
 
     // Walk it once for the size and the file count the card will see.
-    QDirIterator walker(localPath, QDir::Files | QDir::NoDotAndDotDot,
+    QDirIterator walker(localPath, QDir::Files | QDir::NoDotAndDotDot | QDir::NoSymLinks,
                         QDirIterator::Subdirectories);
     int guard = 0;
     while (walker.hasNext() && guard < 200000) {
@@ -307,6 +508,10 @@ PackageInfo PackageInspector::inspectFolder(const QString &localPath)
         ++guard;
         ++info.entryCount;
         info.unpackedSize += walker.fileInfo().size();
+    }
+    if (walker.hasNext()) {
+        info.error = QStringLiteral("Folder contains too many files to inspect");
+        return info;
     }
     info.fileSize = info.unpackedSize;
 

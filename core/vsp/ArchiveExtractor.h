@@ -46,6 +46,11 @@ struct ExtractionLimits
 class ArchiveExtractor
 {
 public:
+    static QStringList entryNames(const QString &archivePath, QString *error);
+    static ExtractionResult extractArchive(const QString &archivePath,
+                                           const QString &prefix,
+                                           const QString &destinationDir,
+                                           const ExtractionLimits &limits = ExtractionLimits());
     /// Extracts every entry of \a archive under \a archivePrefix into
     /// \a destinationDir, preserving the structure below the prefix.
     static ExtractionResult extractSubtree(ZipReader *archive,

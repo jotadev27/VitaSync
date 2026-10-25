@@ -7,6 +7,12 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QProcess>
+#include <QSaveFile>
+#include <QTemporaryFile>
+#include <QElapsedTimer>
+#include <QStandardPaths>
+#include <QSet>
 
 namespace vsp {
 namespace {
@@ -45,6 +51,162 @@ QString safeRelativePath(const QString &raw, int maxDepth)
 
 } // namespace
 
+namespace {
+QString archiveTool()
+{
+#ifdef Q_OS_WIN
+    // Use the Windows component, never an executable supplied by an archive
+    // or discovered in the working directory.
+    return QDir(qEnvironmentVariable("SystemRoot", "C:/Windows"))
+        .filePath(QStringLiteral("System32/tar.exe"));
+#else
+    return QStandardPaths::findExecutable(QStringLiteral("bsdtar"));
+#endif
+}
+
+bool isZip(const QString &name)
+{
+    const QString suffix = QFileInfo(name).suffix().toLower();
+    return suffix == QLatin1String("zip") || suffix == QLatin1String("vpk");
+}
+
+}
+
+QStringList ArchiveExtractor::entryNames(const QString &archivePath, QString *error)
+{
+    if (error) error->clear();
+    if (isZip(archivePath)) {
+        ZipReader zip;
+        if (zip.open(archivePath)) return zip.entryNames();
+        if (error) *error = zip.errorString();
+        return {};
+    }
+    const QString tool = archiveTool();
+    if (tool.isEmpty() || !QFileInfo(tool).isFile()) {
+        if (error) *error = QStringLiteral("An archive reader is unavailable on this system");
+        return {};
+    }
+    QProcess process;
+    process.setStandardErrorFile(QProcess::nullDevice());
+    process.start(tool, {QStringLiteral("-tf"), QFileInfo(archivePath).absoluteFilePath()});
+    process.closeWriteChannel();
+    QByteArray listing;
+    QElapsedTimer clock;
+    clock.start();
+    while (process.state() != QProcess::NotRunning) {
+        process.waitForReadyRead(50);
+        listing += process.readAllStandardOutput();
+        if (listing.size() > 8 * 1024 * 1024 || clock.elapsed() > 30000) {
+            process.kill(); process.waitForFinished();
+            if (error) *error = QStringLiteral("Archive listing exceeds its size or time limit");
+            return {};
+        }
+    }
+    listing += process.readAllStandardOutput();
+    if (listing.size() > 8 * 1024 * 1024) {
+        if (error) *error = QStringLiteral("Archive listing exceeds its size or time limit");
+        return {};
+    }
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        if (error) *error = QStringLiteral("Cannot read this archive; it may be damaged, encrypted or unsupported");
+        return {};
+    }
+    QStringList names = QString::fromUtf8(listing).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    if (names.size() > 20000) {
+        if (error) *error = QStringLiteral("Archive contains too many entries");
+        return {};
+    }
+    // Reject link/device records before extracting individual members. The
+    // archive tool writes only to stdout, and Qt creates the regular files.
+    QProcess types;
+    types.setStandardErrorFile(QProcess::nullDevice());
+    types.start(tool, {QStringLiteral("-tvf"), QFileInfo(archivePath).absoluteFilePath()});
+    types.closeWriteChannel();
+    QByteArray details;
+    clock.restart();
+    while (types.state() != QProcess::NotRunning) {
+        types.waitForReadyRead(50);
+        details += types.readAllStandardOutput();
+        if (details.size() > 16 * 1024 * 1024 || clock.elapsed() > 30000) {
+            types.kill(); types.waitForFinished();
+            if (error) *error = details.size() > 16 * 1024 * 1024
+                ? QStringLiteral("Cannot inspect archive file types")
+                : QStringLiteral("Archive inspection timed out");
+            return {};
+        }
+    }
+    details += types.readAllStandardOutput();
+    if (types.exitCode() != 0 || types.exitStatus() != QProcess::NormalExit
+        || details.size() > 16 * 1024 * 1024) {
+        if (error) *error = QStringLiteral("Cannot inspect archive file types");
+        return {};
+    }
+    for (const QByteArray &line : details.split('\n')) {
+        if (!line.isEmpty() && line.at(0) != '-' && line.at(0) != 'd') {
+            if (error) *error = QStringLiteral("Archive links and special files cannot be sent");
+            return {};
+        }
+    }
+    for (QString &name : names) {
+        if (name.endsWith(QLatin1Char('\r'))) name.chop(1);
+    }
+    return names;
+}
+
+ExtractionResult ArchiveExtractor::extractArchive(const QString &archivePath,
+                                                  const QString &prefix,
+                                                  const QString &destinationDir,
+                                                  const ExtractionLimits &limits)
+{
+    if (isZip(archivePath)) {
+        ZipReader zip;
+        ExtractionResult result;
+        if (!zip.open(archivePath)) { result.error = zip.errorString(); return result; }
+        return extractSubtree(&zip, prefix, destinationDir, limits);
+    }
+    ExtractionResult result;
+    QString error;
+    const QStringList names = entryNames(archivePath, &error);
+    if (!error.isEmpty()) { result.error = error; return result; }
+    QDir destination(destinationDir);
+    if (!destination.mkpath(QStringLiteral("."))) {
+        result.error = QStringLiteral("Cannot create archive workspace"); return result;
+    }
+    // Repack once to a stored ZIP stream. The reader never writes archive
+    // paths, and the existing bounded ZIP extractor validates every output.
+    QTemporaryFile temporary(destination.filePath(QStringLiteral("reader-XXXXXX.zip")));
+    if (!temporary.open()) { result.error = temporary.errorString(); return result; }
+    QProcess process;
+    process.setStandardErrorFile(QProcess::nullDevice());
+    process.start(archiveTool(), {QStringLiteral("-cf"), QStringLiteral("-"),
+                                 QStringLiteral("--format=zip"), QStringLiteral("--options=zip:compression=store"),
+                                 QStringLiteral("@") + QFileInfo(archivePath).absoluteFilePath()});
+    process.closeWriteChannel();
+    QElapsedTimer clock;
+    clock.start();
+    qint64 bytes = 0;
+    const qint64 outputLimit = limits.maxTotalBytes + qint64(names.size()) * 4096 + 1024 * 1024;
+    auto drain = [&] {
+        const QByteArray chunk = process.readAllStandardOutput();
+        bytes += chunk.size();
+        return bytes <= outputLimit && temporary.write(chunk) == chunk.size();
+    };
+    while (process.state() != QProcess::NotRunning) {
+        process.waitForReadyRead(50);
+        if (!drain() || clock.elapsed() > 300000) {
+            process.kill(); process.waitForFinished();
+            result.error = QStringLiteral("Archive extraction exceeds its size or time limit");
+            return result;
+        }
+    }
+    if (!drain() || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        result.error = QStringLiteral("Cannot extract archive contents"); return result;
+    }
+    temporary.close();
+    ZipReader zip;
+    if (!zip.open(temporary.fileName())) { result.error = zip.errorString(); return result; }
+    return extractSubtree(&zip, prefix, destinationDir, limits);
+}
 ExtractionResult ArchiveExtractor::collectDirectory(const QString &sourceDir,
                                                     const ExtractionLimits &limits)
 {
@@ -57,7 +219,7 @@ ExtractionResult ArchiveExtractor::collectDirectory(const QString &sourceDir,
     }
     result.rootPath = QDir::cleanPath(root.absolutePath());
 
-    QDirIterator walker(result.rootPath, QDir::Files | QDir::NoDotAndDotDot,
+    QDirIterator walker(result.rootPath, QDir::Files | QDir::NoDotAndDotDot | QDir::NoSymLinks,
                         QDirIterator::Subdirectories);
     while (walker.hasNext()) {
         const QString filePath = walker.next();
@@ -124,6 +286,7 @@ ExtractionResult ArchiveExtractor::extractSubtree(ZipReader *archive,
     const QString rootWithSlash = root.endsWith(QLatin1Char('/')) ? root
                                                                   : root + QLatin1Char('/');
     result.rootPath = root;
+    QSet<QString> written;
 
     const QStringList names = archive->entryNames();
     for (const QString &name : names) {
@@ -159,6 +322,10 @@ ExtractionResult ArchiveExtractor::extractSubtree(ZipReader *archive,
             ++result.skipped;
             continue;
         }
+        if (written.contains(relative.toCaseFolded())) {
+            result.error = QStringLiteral("Archive contains colliding file names"); return result;
+        }
+        written.insert(relative.toCaseFolded());
 
         const QString target = QDir::cleanPath(destination.absoluteFilePath(relative));
         // Belt and braces: the components were sanitised, but the resolved path
@@ -174,27 +341,20 @@ ExtractionResult ArchiveExtractor::extractSubtree(ZipReader *archive,
             return result;
         }
 
-        const QByteArray payload = archive->read(name, limits.maxFileBytes);
-        if (payload.isEmpty() && entry->uncompressedSize > 0) {
-            ++result.skipped;
-            continue;
-        }
-
-        QFile out(target);
-        if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        QSaveFile out(target);
+        if (!out.open(QIODevice::WriteOnly)) {
             result.error = QStringLiteral("Cannot write %1").arg(target);
             return result;
         }
-        if (out.write(payload) != payload.size()) {
-            result.error = QStringLiteral("Ran out of space writing %1").arg(relative);
+        if (!archive->copyTo(name, &out, limits.maxFileBytes) || !out.commit()) {
+            result.error = QStringLiteral("Cannot extract %1: %2").arg(relative, archive->errorString());
             return result;
         }
-        out.close();
 
         ExtractedFile file;
         file.localPath = target;
         file.relativePath = relative;
-        file.size = payload.size();
+        file.size = static_cast<qint64>(entry->uncompressedSize);
         result.files.append(file);
         result.totalBytes += file.size;
     }

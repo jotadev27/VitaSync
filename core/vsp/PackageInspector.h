@@ -20,7 +20,10 @@ enum class PackageKind {
     ShellTheme,  ///< VitaShell skin: a colors.txt / PNG folder
     Video,
     Photo,
-    Music
+    Music,
+    Folder,      ///< an ordinary folder copied with its relative tree intact
+    Archive,     ///< compressed contents extracted locally before transfer
+    AndroidApp   ///< recognised for copying; Android APKs do not run on PS Vita
 };
 
 QString packageKindLabel(PackageKind kind);
@@ -72,6 +75,14 @@ struct PackageInfo
     /// PackageInspector::inspectNoNpDrmDump() and docs/nonpdrm.md.
     QString noNpDrmRoot;
 
+    /// Explicit Vita layout relative to the selected mount; "/" means its root.
+    QString contentRoot;
+    /// Mirror the source's contents directly into the destination, not another
+    /// folder named after the archive or the ux0/data wrapper.
+    bool mergeContents = false;
+    bool autoRouteContents = false;
+
+
     /// A display name that is always safe to show, even for unmatched files.
     QString displayName() const;
     bool isInstallable() const;
@@ -84,8 +95,10 @@ struct PackageInfo
 class PackageInspector
 {
 public:
+    static bool hasContentLayout(const QString &localPath);
     /// Inspects \a localPath. Recognises VPK/ZIP packages (games, homebrew,
-    /// themes), already-unpacked game folders, and media files by extension.
+    /// themes), game/theme/ordinary folders, archives and Android APKs for
+    /// copying, and media files by extension. Archives are not executed.
     static PackageInfo inspect(const QString &localPath);
 
     /// Inspects an unpacked game folder: a directory holding `sce_sys` and

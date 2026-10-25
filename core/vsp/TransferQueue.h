@@ -206,6 +206,7 @@ private:
         qint64 completedBytes = 0;
         QString tempRoot;             ///< extraction dir to remove when done
         bool sourceIsDirectory = false; ///< walk the source instead of unpacking
+        bool autoRouteContents = false;
         QString archivePrefix;
         QString localRoot;            ///< mirror root for a folder download
     };

@@ -52,6 +52,8 @@ public:
     /// Reads and decompresses one member. \a maxSize caps the allocation so a
     /// hostile archive cannot make us commit gigabytes for a "param.sfo".
     QByteArray read(const QString &name, qint64 maxSize = 16 * 1024 * 1024);
+    /// Streams one member with bounded buffers and CRC/length verification.
+    bool copyTo(const QString &name, QIODevice *output, qint64 maxSize);
 
 private:
     bool buildIndex();

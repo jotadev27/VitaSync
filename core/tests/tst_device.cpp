@@ -85,6 +85,100 @@ private:
     }
 
 private slots:
+    void rejectedFilesRemainVisibleAfterSendingValidFiles()
+    {
+        VitaDevice device;
+        QVERIFY(connectDeviceUsb(&device));
+        const QString invalid = m_localRoot.filePath(QStringLiteral("broken.vpk"));
+        const QString valid = m_localRoot.filePath(QStringLiteral("valid-photo.jpg"));
+        for (const QString &name : {invalid, valid}) {
+            QFile file(name);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("sample");
+        }
+        QCOMPARE(device.addDrops({invalid, valid}), 2);
+        QCOMPARE(device.drops()->readyCount(), 1);
+        device.startStaged();
+        QCOMPARE(device.drops()->rowCount(), 1);
+        QVERIFY(!device.drops()->itemAt(0).value(QStringLiteral("error")).toString().isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!device.transfers()->isBusy(), 5000);
+        QCOMPARE(device.transfers()->failedCount(), 0);
+    }
+
+    void mixedDropBatchRecognisesFormatsAndCopiesThemToTheirDestinations()
+    {
+        VitaDevice device;
+        QVERIFY(connectDeviceUsb(&device));
+        QStringList paths;
+        const QStringList names {QStringLiteral("backup.rar"), QStringLiteral("backup.7z"),
+                                 QStringLiteral("android.apk"), QStringLiteral("photo.jpg"),
+                                 QStringLiteral("clip.mp4")};
+        for (const QString &name : names) {
+            const QString target = m_localRoot.filePath(name);
+            QFile file(target);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QCOMPARE(file.write("sample"), qint64(6));
+            file.close();
+            paths << QUrl::fromLocalFile(target).toString();
+        }
+        const QString zip = m_localRoot.filePath(QStringLiteral("documents.zip"));
+        QVERIFY(!writeArchive(zip, {{QStringLiteral("readme.txt"), QByteArray("hello"), false}}).isEmpty());
+        paths << zip;
+        const QString vpk = m_localRoot.filePath(QStringLiteral("game.vpk"));
+        QVERIFY(!writeArchive(vpk, {{QStringLiteral("sce_sys/param.sfo"),
+            makeSfo({{QStringLiteral("CATEGORY"), QStringLiteral("gd")},
+                     {QStringLiteral("TITLE_ID"), QStringLiteral("PCSA00011")},
+                     {QStringLiteral("TITLE"), QStringLiteral("Test game")}}), false}}).isEmpty());
+        paths << vpk;
+        QCOMPARE(device.addDrops(paths), 7);
+        QCOMPARE(device.drops()->readyCount(), 7);
+        QCOMPARE(device.addDrops(paths), 0);
+        QSignalSpy ready(&device, &VitaDevice::installReady);
+        device.startStaged();
+        QTRY_VERIFY_WITH_TIMEOUT(!device.transfers()->isBusy(), 15000);
+        QCOMPARE(device.transfers()->failedCount(), 0);
+        QCOMPARE(device.transfers()->rowCount(), 7);
+        QCOMPARE(ready.count(), 1);
+        for (const QString &name : {QStringLiteral("backup.rar"), QStringLiteral("backup.7z"),
+                                    QStringLiteral("android.apk")}) {
+            QFile copied(usbPath(QStringLiteral("downloads/") + name));
+            QVERIFY(copied.open(QIODevice::ReadOnly));
+            QCOMPARE(copied.readAll(), QByteArray("sample"));
+        }
+        QVERIFY(QFileInfo::exists(usbPath(QStringLiteral("downloads/documents.zip"))));
+        QVERIFY(QFileInfo::exists(usbPath(QStringLiteral("picture/photo.jpg"))));
+        QVERIFY(QFileInfo::exists(usbPath(QStringLiteral("video/clip.mp4"))));
+        QVERIFY(QFileInfo::exists(usbPath(QStringLiteral("vpk/game.vpk"))));
+    }
+
+    void ordinaryFolderUploadFinishesWithoutAnInstallPrompt()
+    {
+        VitaDevice device;
+        QVERIFY(connectDeviceUsb(&device));
+        const QString root = m_localRoot.filePath(QStringLiteral("Holiday photos"));
+        QVERIFY(QDir().mkpath(root + QStringLiteral("/Day 1")));
+        QFile photo(root + QStringLiteral("/Day 1/photo.jpg"));
+        QVERIFY(photo.open(QIODevice::WriteOnly));
+        QCOMPARE(photo.write("sample photo"), qint64(12));
+        photo.close();
+
+        QCOMPARE(device.addDrops({QUrl::fromLocalFile(root).toString()}), 1);
+        QCOMPARE(device.drops()->readyCount(), 1);
+        QCOMPARE(device.drops()->itemAt(0).value(QStringLiteral("destination")).toString(),
+                 QStringLiteral("/ux0:/downloads"));
+        QSignalSpy ready(&device, &VitaDevice::folderInstallReady);
+        QSignalSpy finished(device.transfers(), &TransferQueue::jobFinished);
+        device.startStaged();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 10000);
+        QVERIFY(finished.first().at(1).toBool());
+        QCOMPARE(ready.count(), 0);
+        QCOMPARE(device.transfers()->data(device.transfers()->index(0, 0), TransferQueue::StateRole).toInt(),
+                 static_cast<int>(TransferQueue::JobState::Complete));
+        QFile copied(usbPath(QStringLiteral("downloads/Holiday photos/Day 1/photo.jpg")));
+        QVERIFY(copied.open(QIODevice::ReadOnly));
+        QCOMPARE(copied.readAll(), QByteArray("sample photo"));
+    }
+
     void initTestCase()
     {
         // Keep QSettings out of the developer's real configuration.
@@ -164,7 +258,7 @@ private slots:
 
     void init()
     {
-        QSettings settings(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+        QSettings settings(QDir::tempPath() + QStringLiteral("/vitasync-test")
                                + QStringLiteral("/settings.ini"), QSettings::IniFormat);
         settings.clear();
         settings.sync();
@@ -886,7 +980,7 @@ private slots:
         QCOMPARE(info.titleId, QStringLiteral("PCSE00042"));
     }
 
-    void aFolderThatIsNotAGameIsRefusedWithAReason()
+    void aFolderThatIsNotAGameCanBeCopiedWithoutInstalling()
     {
         const QString root = m_localRoot.filePath(QStringLiteral("Holiday Photos"));
         QVERIFY(QDir().mkpath(root));
@@ -896,8 +990,10 @@ private slots:
         file.close();
 
         const PackageInfo info = PackageInspector::inspect(root);
-        QVERIFY(!info.valid);
-        QVERIFY2(info.error.contains(QLatin1String("Title ID")), qPrintable(info.error));
+        QVERIFY2(info.valid, qPrintable(info.error));
+        QCOMPARE(info.kind, PackageKind::Folder);
+        QVERIFY(info.isDirectoryPayload());
+        QVERIFY(!info.isInstallable());
     }
 
     void noNpDrmDumpIsRecognisedAndAGameFolderIsNot()

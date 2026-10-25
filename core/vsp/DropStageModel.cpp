@@ -17,6 +17,8 @@ namespace {
 // than one at once, which a single kind can't express.
 QString destinationFor(const PackageInfo &info, const QString &mount)
 {
+    if (!info.contentRoot.isEmpty())
+        return path::normalizeRemote(QStringLiteral("/%1/%2").arg(mount, info.contentRoot));
     if (!info.noNpDrmRoot.isEmpty())
         return vitapaths::fixedRootFor(info.noNpDrmRoot, mount);
     return vitapaths::destinationDirFor(info.kind, mount);
@@ -49,6 +51,9 @@ QString accentFor(PackageKind kind)
     case PackageKind::Photo:
     case PackageKind::Music:    return QStringLiteral("green");
     case PackageKind::Unknown:  break;
+    case PackageKind::Folder:
+    case PackageKind::Archive:
+    case PackageKind::AndroidApp: break;
     }
     return QStringLiteral("grey");
 }
@@ -115,6 +120,7 @@ QHash<int, QByteArray> DropStageModel::roleNames() const
         { CoverSourceRole, "coverSource" },
         { MatchedRole,     "matched" },
         { DestinationRole, "destination" },
+        { AutomaticRoutingRole, "automaticRouting" },
         { LocalPathRole,   "localPath" },
         { ErrorRole,       "error" },
         { InstallableRole, "installable" },
@@ -132,6 +138,14 @@ QVariant DropStageModel::data(const QModelIndex &index, int role) const
     case TitleRole:     return info.displayName();
     case TitleIdRole:   return info.titleId;
     case SubtitleRole:
+        if (!info.error.isEmpty())
+            return info.error;
+        if (info.kind == PackageKind::Archive)
+            return info.autoRouteContents
+                ? QStringLiteral("Contents will be extracted and routed by file type")
+                : QStringLiteral("Contents will be extracted; Vita folder structure is preserved");
+        if (info.kind == PackageKind::AndroidApp)
+            return QStringLiteral("Android application; can be copied, but cannot run on PS Vita");
         // A folder is described by what it holds. A game keeps its Title ID
         // front and centre, exactly as a packaged one does; a theme has none,
         // so its author stands in.
@@ -175,6 +189,7 @@ QVariant DropStageModel::data(const QModelIndex &index, int role) const
         // normal, which is exactly what the alert marker must not do.
         return info.isDirectoryPayload() || info.metadataMatched;
     case DestinationRole: return m_destinations.value(index.row());
+    case AutomaticRoutingRole: return info.autoRouteContents;
     case LocalPathRole:   return info.localPath;
     case ErrorRole:       return info.error;
     case InstallableRole: return info.isInstallable();
@@ -265,7 +280,8 @@ int DropStageModel::addPaths(const QStringList &localPaths)
         // A NoNpDrm-style dump is a parent folder to be split, not one
         // package -- one dropped path can become several staged rows, each
         // with its own fixed destination. See PackageInspector::inspectNoNpDrmDump().
-        if (isDirectory && PackageInspector::looksLikeNoNpDrmDump(absolute)) {
+        if (isDirectory && !PackageInspector::hasContentLayout(absolute)
+            && PackageInspector::looksLikeNoNpDrmDump(absolute)) {
             const QVector<PackageInfo> parts = PackageInspector::inspectNoNpDrmDump(absolute);
             for (const PackageInfo &part : parts)
                 appendInfo(part);
@@ -277,7 +293,8 @@ int DropStageModel::addPaths(const QStringList &localPaths)
         // this check it either gets refused outright or -- if its inner
         // serial folder is dragged instead -- silently defaults to ux0:app
         // no matter which of the three it actually came from.
-        if (isDirectory && PackageInspector::looksLikeStandaloneContentFolder(absolute)) {
+        if (isDirectory && !PackageInspector::hasContentLayout(absolute)
+            && PackageInspector::looksLikeStandaloneContentFolder(absolute)) {
             const QVector<PackageInfo> parts = PackageInspector::inspectStandaloneContentFolder(absolute);
             for (const PackageInfo &part : parts)
                 appendInfo(part);
@@ -343,10 +360,12 @@ void DropStageModel::setDestination(int row, const QString &remoteDir)
     if (row < 0 || row >= m_destinations.size())
         return;
     const QString normalized = path::normalizeRemote(remoteDir);
-    if (m_destinations.at(row) == normalized)
+    if (m_destinations.at(row) == normalized && !m_items.at(row).autoRouteContents)
         return;
+    m_items[row].autoRouteContents = false;
+    m_items[row].contentRoot = normalized.section(QLatin1Char('/'), 2);
     m_destinations[row] = normalized;
-    emit dataChanged(index(row, 0), index(row, 0), { DestinationRole });
+    emit dataChanged(index(row, 0), index(row, 0), { DestinationRole, AutomaticRoutingRole, InstallableRole });
 }
 
 } // namespace vsp

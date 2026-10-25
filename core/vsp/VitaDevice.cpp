@@ -697,8 +697,8 @@ int VitaDevice::addDrops(const QStringList &paths)
         emit notify(QStringLiteral("Nothing new to add"), QStringLiteral("warn"));
         return 0;
     }
-    emit notify(added == 1 ? QStringLiteral("1 item ready")
-                           : QStringLiteral("%1 items ready").arg(added),
+    emit notify(added == 1 ? QStringLiteral("1 item added")
+                           : QStringLiteral("%1 items added").arg(added),
                 QStringLiteral("info"));
     return added;
 }
@@ -724,6 +724,7 @@ void VitaDevice::startStaged()
         m_companion->keepAwake(true);
 
     int queued = 0;
+    QList<int> queuedRows;
     for (int i = 0; i < items.size(); ++i) {
         const PackageInfo &info = items.at(i);
         if (!info.valid)
@@ -733,11 +734,13 @@ void VitaDevice::startStaged()
         if (destination.isEmpty())
             continue;
 
-        if (info.isDirectoryPayload())
-            m_transfers->enqueueFolderInstall(info, destination);
-        else
-            m_transfers->enqueueUpload(info, destination, info.isInstallable());
-        ++queued;
+        const int jobId = info.isDirectoryPayload()
+                              ? m_transfers->enqueueFolderInstall(info, destination)
+                              : m_transfers->enqueueUpload(info, destination, info.isInstallable());
+        if (jobId > 0) {
+            queuedRows.append(i);
+            ++queued;
+        }
     }
 
     if (queued == 0) {
@@ -745,7 +748,8 @@ void VitaDevice::startStaged()
         return;
     }
 
-    m_drops->clear();
+    for (auto row = queuedRows.crbegin(); row != queuedRows.crend(); ++row)
+        m_drops->removeAt(*row);
     m_transfers->start();
     emit notify(QStringLiteral("%1 queued").arg(queued), QStringLiteral("ok"));
     emit transfersStarted(queued);

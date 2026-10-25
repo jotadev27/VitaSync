@@ -14,6 +14,7 @@
 #include <vsp/ZipReader.h>
 
 #include <QDir>
+#include <QBuffer>
 #include <QTemporaryDir>
 #include <QtEndian>
 #include <QtTest>
@@ -30,6 +31,208 @@ class CoreTest : public QObject
     Q_OBJECT
 
 private slots:
+    void arbitraryNamesUseTheirFileExtension_data()
+    {
+        QTest::addColumn<QString>("fileName");
+        QTest::addColumn<QString>("label");
+        QTest::newRow("photo") << "masmss.jpg" << "Photo";
+        QTest::newRow("music") << "x7.mp3" << "Music";
+        QTest::newRow("video") << "abc.MP4" << "Video";
+    }
+
+    void arbitraryNamesUseTheirFileExtension()
+    {
+        QFETCH(QString, fileName);
+        QFETCH(QString, label);
+        QTemporaryDir root;
+        QFile file(root.filePath(fileName));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("synthetic classification fixture"); file.close();
+        const auto info = PackageInspector::inspect(file.fileName());
+        QVERIFY(info.valid);
+        QCOMPARE(info.fileName, fileName);
+        QCOMPARE(packageKindLabel(info.kind), label);
+    }
+
+    void streamingArchiveMembers_data()
+    {
+        QTest::addColumn<bool>("compressed");
+        QTest::newRow("stored") << false;
+        QTest::newRow("deflated") << true;
+    }
+
+    void streamingArchiveMembers()
+    {
+        QFETCH(bool, compressed);
+        QTemporaryDir root;
+        QByteArray payload(2 * 1024 * 1024, 'x');
+        payload[65536] = 'y';
+        const QString file = writeArchive(root.filePath("stream.zip"), {{"payload.bin", payload, compressed}});
+        ZipReader archive;
+        QVERIFY(archive.open(file));
+        QBuffer output;
+        QVERIFY(output.open(QIODevice::WriteOnly));
+        QVERIFY(archive.copyTo("payload.bin", &output, payload.size()));
+        QCOMPARE(output.data(), payload);
+        QBuffer limited;
+        QVERIFY(limited.open(QIODevice::WriteOnly));
+        QVERIFY(!archive.copyTo("payload.bin", &limited, payload.size() - 1));
+        QVERIFY(limited.data().isEmpty());
+        archive.close();
+        QByteArray corrupt = makeZip({{"payload.bin", payload, compressed}});
+        const int central = corrupt.indexOf(QByteArray::fromHex("504b0102"));
+        QVERIFY(central >= 0);
+        corrupt[central + 16] = char(corrupt.at(central + 16) ^ 1);
+        QFile damaged(root.filePath("damaged.zip"));
+        QVERIFY(damaged.open(QIODevice::WriteOnly));
+        QCOMPARE(damaged.write(corrupt), qint64(corrupt.size())); damaged.close();
+        QVERIFY(archive.open(damaged.fileName()));
+        QBuffer invalid;
+        QVERIFY(invalid.open(QIODevice::WriteOnly));
+        QVERIFY(!archive.copyTo("payload.bin", &invalid, payload.size()));
+    }
+
+    void savedataSfoDoesNotBecomeAnApplicationFolder()
+    {
+        QTemporaryDir root;
+        const QString folder = root.filePath("PCSE00002");
+        QVERIFY(QDir().mkpath(folder + "/sce_sys"));
+        QFile sfo(folder + "/sce_sys/param.sfo");
+        QVERIFY(sfo.open(QIODevice::WriteOnly));
+        sfo.write(makeSfo({{"CATEGORY", "sd"}, {"TITLE_ID", "PCSE00002"}})); sfo.close();
+        const auto info = PackageInspector::inspect(folder);
+        QVERIFY(info.valid);
+        QCOMPARE(info.kind, PackageKind::Folder);
+        QCOMPARE(info.contentRoot, QStringLiteral("user/00/savedata"));
+        QVERIFY(!info.isInstallable());
+    }
+
+    void savedataZipContentsAreExtractedInsteadOfUploadedAsAnApplication()
+    {
+        QTemporaryDir root;
+        const QString file = writeArchive(root.filePath(QStringLiteral("backup.zip")), {
+            {QStringLiteral("sce_sys/param.sfo"),
+             makeSfo({{"CATEGORY", "sd"}, {"TITLE_ID", "PCSE00002"}}), false},
+            {QStringLiteral("save.bin"), QByteArray("synthetic savedata"), false}
+        });
+        QVERIFY(!file.isEmpty());
+        const PackageInfo info = PackageInspector::inspect(file);
+        QVERIFY2(info.valid, qPrintable(info.error));
+        QCOMPARE(info.kind, PackageKind::Archive);
+        QCOMPARE(info.category, QStringLiteral("sd"));
+        QCOMPARE(info.titleId, QStringLiteral("PCSE00002"));
+        QVERIFY(info.isDirectoryPayload());
+        QVERIFY(info.mergeContents);
+        QVERIFY(info.autoRouteContents);
+        QVERIFY(!info.isInstallable());
+    }
+
+    void themeFoldersKeepTheirSpecialDestinations()
+    {
+        QTemporaryDir root;
+        QFile theme(root.filePath(QStringLiteral("theme.xml")));
+        QVERIFY(theme.open(QIODevice::WriteOnly));
+        theme.write("<theme format-ver=\"01.00\"><InfomationProperty><m_title>"
+                    "<m_default>Evening</m_default></m_title></InfomationProperty></theme>");
+        theme.close();
+        const PackageInfo info = PackageInspector::inspect(root.path());
+        QVERIFY(info.valid);
+        QCOMPARE(info.kind, PackageKind::SystemTheme);
+        QCOMPARE(info.title, QStringLiteral("Evening"));
+        QVERIFY(info.localIsDirectory);
+        QCOMPARE(vitapaths::destinationDirFor(info.kind, QStringLiteral("ux0:")),
+                 QStringLiteral("/ux0:/customtheme"));
+    }
+
+    void identifiesApkAndRejectsBrokenArchives_data()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<QString>("label");
+        QTest::newRow("rar") << "backup.RAR" << "Archive";
+        QTest::newRow("7z") << "backup.7z" << "Archive";
+        QTest::newRow("apk") << "android.apk" << "Android APK";
+    }
+
+    void identifiesApkAndRejectsBrokenArchives()
+    {
+        QFETCH(QString, name);
+        QFETCH(QString, label);
+        QTemporaryDir root;
+        QFile file(root.filePath(name));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write("sample"), qint64(6));
+        file.close();
+        const PackageInfo info = PackageInspector::inspect(file.fileName());
+        if (label == QLatin1String("Archive")) {
+            QVERIFY(!info.valid);
+            QVERIFY(!info.error.isEmpty());
+            return;
+        }
+        QVERIFY(info.valid);
+        QCOMPARE(packageKindLabel(info.kind), label);
+        QVERIFY(!info.isInstallable());
+        QVERIFY(!info.isDirectoryPayload());
+    }
+
+    void ordinaryZipContentsAreExtractedWithoutBeingInstalled()
+    {
+        QTemporaryDir root;
+        const QString file = root.filePath(QStringLiteral("photos.zip"));
+        QVERIFY(!writeArchive(file, {{QStringLiteral("photo.jpg"), QByteArray("sample"), false}}).isEmpty());
+        const PackageInfo info = PackageInspector::inspect(file);
+        QVERIFY2(info.valid, qPrintable(info.error));
+        QCOMPARE(packageKindLabel(info.kind), QStringLiteral("Archive"));
+        QVERIFY(!info.isInstallable());
+        QVERIFY(info.isDirectoryPayload());
+        QVERIFY(info.mergeContents);
+        QVERIFY(info.autoRouteContents);
+    }
+
+    void dataAndSavedataLayoutsHavePriorityOverFilenameHeuristics()
+    {
+        QTemporaryDir root;
+        const QString base = root.filePath("ux0/data/Example");
+        QVERIFY(QDir().mkpath(base));
+        QFile config(base + "/config.bin");
+        QVERIFY(config.open(QIODevice::WriteOnly));
+        config.write("config"); config.close();
+        const auto file = PackageInspector::inspect(config.fileName());
+        QCOMPARE(file.contentRoot, QStringLiteral("data/Example"));
+        const auto data = PackageInspector::inspect(root.filePath("ux0/data"));
+        QCOMPARE(data.contentRoot, QStringLiteral("data"));
+        QVERIFY(data.mergeContents);
+        const QString save = root.filePath("ux0/user/00/savedata/PCSE00001");
+        QVERIFY(QDir().mkpath(save));
+        QFile payload(save + "/save.bin");
+        QVERIFY(payload.open(QIODevice::WriteOnly));
+        payload.write("save"); payload.close();
+        const auto savedata = PackageInspector::inspect(save);
+        QCOMPARE(savedata.kind, PackageKind::Folder);
+        QCOMPARE(savedata.contentRoot, QStringLiteral("user/00/savedata"));
+        QVERIFY(!savedata.isInstallable());
+    }
+
+    void inspectOrdinaryFolderKeepsItsTree()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        QVERIFY(QDir(root.path()).mkpath(QStringLiteral("Holiday/subfolder")));
+        QFile photo(root.filePath(QStringLiteral("Holiday/subfolder/photo.jpg")));
+        QVERIFY(photo.open(QIODevice::WriteOnly));
+        QCOMPARE(photo.write("sample"), qint64(6));
+        photo.close();
+
+        const PackageInfo info = PackageInspector::inspect(root.filePath(QStringLiteral("Holiday")));
+        QVERIFY2(info.valid, qPrintable(info.error));
+        QCOMPARE(packageKindLabel(info.kind), QStringLiteral("Folder"));
+        QVERIFY(info.isDirectoryPayload());
+        QVERIFY(!info.isInstallable());
+        QCOMPARE(info.entryCount, 1);
+        QCOMPARE(info.fileSize, qint64(6));
+        QCOMPARE(vitapaths::destinationDirFor(info.kind, QStringLiteral("ux0:")),
+                 QStringLiteral("/ux0:/downloads"));
+    }
+
     // --- input hygiene ---------------------------------------------------
 
     void ipValidation_data()

@@ -5,6 +5,7 @@
 #include "PathUtils.h"
 #include "RemoteTransport.h"
 #include "RemoteTreeScanner.h"
+#include "SfoReader.h"
 #include "VitaPaths.h"
 #include "ZipReader.h"
 
@@ -310,7 +311,9 @@ QString TransferQueue::cacheIconFor(const PackageInfo &info) const
     if (info.iconPng.isEmpty())
         return info.coverPath.isEmpty() ? QString() : QUrl::fromLocalFile(info.coverPath).toString();
 
-    const QString cacheRoot = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    const QString cacheRoot = QStandardPaths::isTestModeEnabled()
+                                  ? QDir::tempPath() + QStringLiteral("/vitasync-test/cache")
+                                  : QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     QDir dir(cacheRoot + QStringLiteral("/icons"));
     if (!dir.exists() && !dir.mkpath(QStringLiteral(".")))
         return {};
@@ -400,12 +403,13 @@ int TransferQueue::enqueueFolderInstall(const PackageInfo &info, const QString &
     job.kind = Kind::InstallTheme;
     job.localPath = info.localPath;
     job.remoteDir = path::normalizeRemote(remoteParentDir);
-    job.remotePath = path::joinRemote(job.remoteDir, folder);
+    job.remotePath = info.mergeContents ? job.remoteDir : path::joinRemote(job.remoteDir, folder);
+    job.autoRouteContents = info.autoRouteContents;
     job.title = info.displayName();
     job.kindLabel = packageKindLabel(info.kind);
     job.archivePrefix = info.archivePrefix;
     job.iconSource = cacheIconFor(info);
-    job.wantsInstall = true;
+    job.wantsInstall = info.isInstallable();
     // Until the archive is opened the unpacked size is the best estimate we
     // have; it is replaced with the real total once extraction finishes.
     job.total = info.unpackedSize > 0 ? info.unpackedSize : info.fileSize;
@@ -650,19 +654,40 @@ void TransferQueue::startFolderPreparation(int row)
     const QString prefix = job.archivePrefix;
     m_extractingRow = row;
     m_extractWatcher->setFuture(QtConcurrent::run([archivePath, prefix, tempRoot] {
-        ZipReader archive;
-        ExtractionResult result;
-        if (!archive.open(archivePath)) {
-            result.error = archive.errorString();
-            return result;
-        }
-        return ArchiveExtractor::extractSubtree(&archive, prefix, tempRoot);
+        ExtractionLimits limits;
+        limits.maxTotalBytes = 32LL * 1024 * 1024 * 1024;
+        limits.maxFileBytes = 8LL * 1024 * 1024 * 1024;
+        limits.maxFiles = 20000;
+        limits.maxDepth = 12;
+        return ArchiveExtractor::extractArchive(archivePath, prefix, tempRoot, limits);
     }));
 }
 
 void TransferQueue::buildUploadPlan(int row, const ExtractionResult &extraction)
 {
     Job &job = m_jobs[row];
+
+    const QString mount = job.remoteDir.section(QLatin1Char('/'), 1, 1);
+    QHash<QString, QString> saveRoots;
+    if (job.autoRouteContents) {
+        const QString marker = QStringLiteral("sce_sys/param.sfo");
+        for (const ExtractedFile &file : extraction.files) {
+            if (!file.relativePath.endsWith(marker, Qt::CaseInsensitive)) continue;
+            QFile source(file.localPath);
+            SfoReader sfo;
+            if (!source.open(QIODevice::ReadOnly) || !sfo.parse(source.read(4 * 1024 * 1024))
+                || sfo.category() != QLatin1String("sd")) continue;
+            const QString prefix = file.relativePath.left(file.relativePath.size() - marker.size());
+            QString titleId = sfo.titleId();
+            if (titleId.isEmpty()) titleId = prefix.section(QLatin1Char('/'), -2, -2);
+            if (!PackageInspector::looksLikeTitleId(titleId)) continue;
+            saveRoots.insert(prefix, path::joinRemote(vitapaths::savedataDir(mount), titleId));
+        }
+    }
+    QStringList savePrefixes = saveRoots.keys();
+    std::sort(savePrefixes.begin(), savePrefixes.end(), [](const QString &a, const QString &b) {
+        return a.size() > b.size();
+    });
 
     QSet<QString> directorySet;
     job.files.clear();
@@ -676,7 +701,25 @@ void TransferQueue::buildUploadPlan(int row, const ExtractionResult &extraction)
         // Rebuild the remote path component by component so the sanitiser runs
         // on every part, not just the leaf.
         QString remote = job.remotePath;
-        const QStringList parts = file.relativePath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+        QString relativePath = file.relativePath;
+        if (job.autoRouteContents) {
+            PackageKind kind = PackageInspector::kindForExtension(file.relativePath);
+            if (QFileInfo(file.relativePath).suffix().compare("vpk", Qt::CaseInsensitive) == 0)
+                kind = PackageKind::Homebrew;
+            remote = vitapaths::destinationDirFor(kind, mount);
+            for (const QString &prefix : savePrefixes) {
+                if (!relativePath.startsWith(prefix, Qt::CaseInsensitive)) continue;
+                remote = saveRoots.value(prefix);
+                relativePath = relativePath.mid(prefix.size());
+                break;
+            }
+        }
+        QString ancestor = remote;
+        while (!ancestor.isEmpty() && ancestor != QLatin1String("/") && !path::isMountRoot(ancestor)) {
+            directorySet.insert(ancestor);
+            ancestor = path::parentOfRemote(ancestor);
+        }
+        const QStringList parts = relativePath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
         for (int i = 0; i < parts.size(); ++i) {
             remote = path::joinRemote(remote, parts.at(i));
             if (i + 1 < parts.size())
@@ -709,6 +752,7 @@ void TransferQueue::buildUploadPlan(int row, const ExtractionResult &extraction)
         return a.count(QLatin1Char('/')) < b.count(QLatin1Char('/'));
     });
     directories.append(nested);
+    directories.removeDuplicates();
 
     job.directories = directories;
     job.phase = Phase::MakeDirectories;
@@ -849,7 +893,7 @@ void TransferQueue::runTreePhase(int row)
 
     if (job.fileIndex >= job.files.size()) {
         job.done = job.total;
-        if (job.kind == Kind::InstallTheme) {
+        if (job.kind == Kind::InstallTheme && job.wantsInstall) {
             job.state = JobState::AwaitingDevice;
             job.verified = true;
             job.message = QStringLiteral("%1 files on device").arg(job.files.size());
@@ -862,9 +906,10 @@ void TransferQueue::runTreePhase(int row)
             return;
         }
         completeJob(row, true,
-                    QStringLiteral("%1 files saved to %2")
+                    QStringLiteral("%1 files copied to %2")
                         .arg(job.files.size())
-                        .arg(QDir::toNativeSeparators(job.localRoot)));
+                        .arg(job.kind == Kind::InstallTheme ? job.remotePath
+                                                           : QDir::toNativeSeparators(job.localRoot)));
         return;
     }
 

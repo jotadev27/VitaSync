@@ -333,4 +333,70 @@ QByteArray ZipReader::read(const QString &name, qint64 maxSize)
     }
 }
 
+bool ZipReader::copyTo(const QString &name, QIODevice *output, qint64 maxSize)
+{
+    const Entry *found = entry(name);
+    if (!found || found->isDirectory || !output || maxSize < 0
+        || found->uncompressedSize > static_cast<quint64>(maxSize)) {
+        m_error = QStringLiteral("Entry exceeds its extraction limit or is unavailable");
+        return false;
+    }
+    if (found->compressionMethod != kMethodStore && found->compressionMethod != kMethodDeflate) {
+        m_error = QStringLiteral("Unsupported compression method"); return false;
+    }
+    if (!m_file.seek(static_cast<qint64>(found->localHeaderOffset))) return false;
+    const QByteArray local = m_file.read(30);
+    if (local.size() != 30 || le<quint32>(local, 0) != kSigLocalHeader) {
+        m_error = QStringLiteral("Entry has a corrupt local header"); return false;
+    }
+    const qint64 offset = static_cast<qint64>(found->localHeaderOffset) + 30
+                        + le<quint16>(local, 26) + le<quint16>(local, 28);
+    if (!m_file.seek(offset)) return false;
+    quint64 remaining = found->compressedSize;
+    quint64 written = 0;
+    uLong checksum = crc32(0, Z_NULL, 0);
+    auto writeChunk = [&](const char *data, qsizetype count) {
+        written += count;
+        if (written > found->uncompressedSize || written > static_cast<quint64>(maxSize)) return false;
+        checksum = crc32(checksum, reinterpret_cast<const Bytef *>(data), static_cast<uInt>(count));
+        return output->write(data, count) == count;
+    };
+    bool ok = true;
+    if (found->compressionMethod == kMethodStore) {
+        while (remaining > 0 && ok) {
+            const QByteArray input = m_file.read(qMin<quint64>(remaining, 65536));
+            if (input.isEmpty()) { ok = false; break; }
+            remaining -= input.size();
+            ok = writeChunk(input.constData(), input.size());
+        }
+    } else {
+        z_stream stream{};
+        if (inflateInit2(&stream, -MAX_WBITS) != Z_OK) return false;
+        QByteArray input;
+        char buffer[65536];
+        int status = Z_OK;
+        while (ok && status != Z_STREAM_END) {
+            if (stream.avail_in == 0 && remaining > 0) {
+                input = m_file.read(qMin<quint64>(remaining, 65536));
+                if (input.isEmpty()) { ok = false; break; }
+                remaining -= input.size();
+                stream.next_in = reinterpret_cast<Bytef *>(input.data());
+                stream.avail_in = static_cast<uInt>(input.size());
+            }
+            stream.next_out = reinterpret_cast<Bytef *>(buffer);
+            stream.avail_out = sizeof(buffer);
+            status = inflate(&stream, Z_NO_FLUSH);
+            const qsizetype count = sizeof(buffer) - stream.avail_out;
+            ok = (status == Z_OK || status == Z_STREAM_END) && writeChunk(buffer, count);
+            if (status != Z_STREAM_END && remaining == 0 && stream.avail_in == 0 && count == 0)
+                ok = false;
+        }
+        ok &= status == Z_STREAM_END && stream.avail_in == 0;
+        inflateEnd(&stream);
+    }
+    ok &= remaining == 0 && written == found->uncompressedSize && checksum == found->crc32;
+    if (!ok) m_error = QStringLiteral("Entry is truncated, corrupt or cannot be written");
+    return ok;
+}
+
 } // namespace vsp

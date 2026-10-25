@@ -36,7 +36,8 @@ public:
         LocalPathRole,
         ErrorRole,
         InstallableRole,
-        AccentRole
+        AccentRole,
+        AutomaticRoutingRole
     };
 
     explicit DropStageModel(QObject *parent = nullptr);
