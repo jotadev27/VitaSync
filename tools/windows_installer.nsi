@@ -9,7 +9,7 @@
 ; Usage (from the project root):
 ;   makensis -DSOURCE_DIR="installer/windows-portable" ^
 ;            -DOUT_FILE="installer/VitaSync-Setup.exe" ^
-;            -DAPP_VERSION="2.0.0" ^
+;            -DAPP_VERSION="3.0.0" ^
 ;            tools/windows_installer.nsi
 
 Unicode true
@@ -23,7 +23,7 @@ Target x86-unicode
   !define OUT_FILE "installer/VitaSync-Setup.exe"
 !endif
 !ifndef APP_VERSION
-  !define APP_VERSION "2.0.0"
+  !define APP_VERSION "3.0.0"
 !endif
 
 !define APP_NAME "VitaSync"
@@ -44,11 +44,19 @@ SetCompressor /SOLID lzma
 !define MUI_ABORTWARNING
 !define MUI_ICON "..\assets\logo\vitasync.ico"
 !define MUI_UNICON "..\assets\logo\vitasync.ico"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "..\assets\installer\wizard.bmp"
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "..\assets\installer\wizard.bmp"
+!define MUI_HEADERIMAGE
+!define MUI_HEADERIMAGE_BITMAP "..\assets\installer\header.bmp"
+!define MUI_HEADERIMAGE_RIGHT
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
+!define MUI_FINISHPAGE_SHOWREADME
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "Create a desktop shortcut"
+!define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateDesktopShortcut
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -76,6 +84,11 @@ Function un.onInit
     SetRegView 64
 FunctionEnd
 
+Function CreateDesktopShortcut
+    SetShellVarContext all
+    CreateShortcut "$DESKTOP\VitaSync.lnk" "$INSTDIR\${APP_EXE}"
+FunctionEnd
+
 Section "Install" SEC_INSTALL
     SetShellVarContext all
     SetOutPath "$INSTDIR"
@@ -83,7 +96,6 @@ Section "Install" SEC_INSTALL
 
     CreateDirectory "$SMPROGRAMS\VitaSync"
     CreateShortcut "$SMPROGRAMS\VitaSync\VitaSync.lnk" "$INSTDIR\${APP_EXE}"
-    CreateShortcut "$DESKTOP\VitaSync.lnk" "$INSTDIR\${APP_EXE}"
 
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 

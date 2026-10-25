@@ -1,53 +1,57 @@
-VitaSync 2.0
+VitaSync 3.0
 Windows 10/11 x64
 
-Send files between your PC and a PS Vita running VitaShell over FTP or USB.
+Transfer files between your PC and a PS Vita running VitaShell over FTP or USB.
 
-Changes
-- Refreshed graphite interface, clearer navigation, and simpler connection controls.
-- Asynchronous USB detection, automatic single-drive selection, and a manual fallback.
-- Broader Vita storage-layout recognition and Windows USB device identification.
-- Fixed Windows USB file and directory operations; USB exposes one ux0: mount.
-- Successful recent FTP connections preserve both address and port in user settings.
-- Restored the original transparent desktop and taskbar icon.
-- Added Windows test fixtures and regression tests for history and USB scanning.
+What's new
+- Light and Dark appearance with remembered preferences and sun/moon controls.
+- Clearer file rows, photo/folder artwork and dedicated music/video images.
+- Start/Clear actions, a Play icon, and smoother scrolling for long file lists.
+- Drop files or folders anywhere to review them before starting a transfer.
+- ZIP, RAR and supported archives are extracted locally before transfer.
+- Vita data and savedata paths are preserved without an extra ux0 wrapper.
+- Savedata metadata is distinguished from application metadata, including ZIPs.
+- Per-item destination choices include Data, Saves, and Downloads.
+- Simpler transfer progress and corrected help, focus and hover interactions.
+- Vita-themed setup artwork and an optional desktop shortcut on the final page.
 
-Install
-Run VitaSync-2.0-Windows-x64-Setup.exe and follow the wizard.
-The installer creates desktop and Start menu shortcuts and an uninstaller.
+Downloads
+VitaSync-3.0-Windows-x64-Setup.exe
+VitaSync-3.0-Windows-x64-Portable.rar
+SHA256SUMS.txt
+RELEASE_NOTES.txt
 
-Portable
-Extract VitaSync-2.0-Windows-x64-Portable.zip completely, then run
-VitaSync/vitasync.exe. Keep all runtime libraries and folders together.
-
-Verify downloads
-Compare the SHA-256 of each downloaded file with SHA256SUMS.txt:
-  Get-FileHash .\VitaSync-2.0-Windows-x64-Setup.exe -Algorithm SHA256
+Setup: run the installer and follow the English wizard. The final page offers
+checkboxes to launch VitaSync and create a desktop shortcut.
+Portable: extract the entire RAR, then open VitaSync/vitasync.exe. Keep all
+runtime libraries and folders beside the executable. No Qt installation is needed.
+Compare the downloaded files with SHA256SUMS.txt. Packages are not code-signed.
 
 Connect
 FTP: set VitaShell's SELECT button to FTP, press SELECT, then enter the
-displayed address and port in VitaSync.
-USB: set SELECT to USB, select your storage, connect a USB data cable,
-and press SELECT. Choose USB cable in VitaSync and press Connect USB.
+address and port shown on the Vita. Use a trusted local network.
+USB: set SELECT to USB, choose the storage device, connect a data cable,
+and press SELECT. Choose USB cable in VitaSync and connect to the exported drive.
 Safely eject USB storage when finished.
 
-Privacy
-No telemetry, cloud account, or automatic update checks. User settings and
-recent connections stay in the user's app configuration directory; they are
-not included in these packages. No personal transfer files are bundled.
-FTP is unencrypted; use a trusted local network.
+Compatibility and verification
+- Core parsing, extraction, and synthetic USB routing checks pass locally.
+- Local UI checks cover help, theme controls, destination selection and 400-item
+  scrolling. Physical Vita USB/FTP operation remains a hardware check.
+- The complete transport/device test suites are not recorded as passing:
+  Kaspersky terminated their test executables during local development.
+  This is not a malware-free certification or a confirmed false-positive verdict.
+- Windows uses its system archive reader for non-ZIP formats. This reader can
+  reject some RAR member names containing non-ASCII characters on this machine.
+  ZIP and folder Unicode paths pass; rejected archives show an error.
+- Encrypted or unsupported archives report an error. Other platforms need bsdtar
+  for non-ZIP formats. Archive paths and extraction sizes are validated.
+- Media is copied without conversion; codec support depends on the Vita.
+  Android APKs are identified but cannot be installed or run on a PS Vita.
+- Upload VPK packages, then open them in VitaShell to install. Folder dumps and
+  savedata still require the matching console setup and permissions.
+- No telemetry, accounts, cloud sync or automatic update checks. Local preferences
+  and user files are excluded from the release packages.
 
-Validation and limitations
-Core, FTP transport, and mounted-folder USB suites passed. Forty-two
-integration cases passed when run separately, covering history, hotplug
-selection, copying, browsing, and mode switching. The FTP reconnect stress
-case stalled locally and was stopped; the complete integration suite is
-not recorded as passing. Physical PS Vita USB identification and
-abrupt-unplug durability remain hardware checks.
-The packages are not code-signed. Android is not included.
-
-Source and documentation
+Source
 https://github.com/jotadev27/VitaSync
-https://github.com/jotadev27/VitaSync/releases
-
-Maintained by jotadev27.

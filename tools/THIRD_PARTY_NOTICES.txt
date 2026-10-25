@@ -1,5 +1,30 @@
 VitaSync Windows runtime dependencies
 
+Installer illustration
+"PlayStation Vita illustration.svg" by Tokyoship, Wikimedia Commons.
+Source: https://commons.wikimedia.org/wiki/File:PlayStation_Vita_illustration.svg
+License: Creative Commons Attribution 3.0 Unported (CC BY 3.0)
+https://creativecommons.org/licenses/by/3.0/
+Changes: composed and scaled into VitaSync installer artwork; editor document
+name changed to English. No endorsement by the author or Sony is implied.
+
+Lucide interface icons
+Copyright (c) 2026 Lucide Icons and Contributors. ISC license.
+Source: https://github.com/lucide-icons/lucide
+Revision: 7b0196e249ca09ca27c584c497aca9a8cab8a7f5
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
 Qt 6.8.3
 The bundled Qt libraries are dynamically linked. Applicable Qt components
 are distributed under LGPL-3.0 or GPL-3.0 with the Qt GPL exception, as

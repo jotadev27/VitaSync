@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="328" height="628" viewBox="0 0 328 628">
+  <rect width="328" height="628" fill="#111f32"/>
+  <rect x="32" y="44" width="36" height="4" fill="#59b8ff"/>
+  <text x="32" y="100" font-family="Segoe UI, sans-serif" font-size="36" font-weight="600" fill="#ffffff">VitaSync</text>
+  <text x="32" y="136" font-family="Segoe UI, sans-serif" font-size="19" fill="#bccddd">Your PC. Your PS Vita.</text>
+  <!-- render_installer_art.cpp composes vita.svg in the central artwork area. -->
+  <path d="M32 516h264" stroke="#45647f"/>
+  <text x="32" y="552" font-family="Segoe UI, sans-serif" font-size="20" fill="#ffffff">Files stay with you.</text>
+  <text x="32" y="582" font-family="Segoe UI, sans-serif" font-size="18" fill="#bccddd">FTP or USB. No account.</text>
+</svg>

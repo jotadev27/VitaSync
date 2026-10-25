@@ -2,7 +2,8 @@ param(
     [string]$BuildDir = 'build',
     [Parameter(Mandatory = $true)][string]$QtDir,
     [Parameter(Mandatory = $true)][string]$MinGWDir,
-    [Parameter(Mandatory = $true)][string]$NsisExe
+    [Parameter(Mandatory = $true)][string]$NsisExe,
+    [Parameter(Mandatory = $true)][string]$RarExe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,12 +12,20 @@ $buildPath = (Resolve-Path -LiteralPath $BuildDir).Path
 $qtPath = (Resolve-Path -LiteralPath $QtDir).Path
 $compilerPath = (Resolve-Path -LiteralPath $MinGWDir).Path
 $nsisPath = (Resolve-Path -LiteralPath $NsisExe).Path
+$rarPath = (Resolve-Path -LiteralPath $RarExe).Path
+if ((Get-AuthenticodeSignature -LiteralPath $rarPath).Status -ne 'Valid') {
+    throw 'The RAR tool must have a valid publisher signature.'
+}
 $outputPath = Join-Path $projectDir 'installer'
-$bundlePath = Join-Path $outputPath 'VitaSync'
+$stagingPath = Join-Path $buildPath 'release-staging'
+$bundlePath = Join-Path $stagingPath 'VitaSync'
 if (Test-Path -LiteralPath $bundlePath) {
-    throw 'installer/VitaSync already exists. Move the previous bundle before packaging again.'
+    throw 'The release staging folder already exists. Review it before packaging again.'
 }
 $executable = Join-Path $buildPath 'vitasync.exe'
+if (-not (Test-Path -LiteralPath $executable)) {
+    $executable = Join-Path $buildPath 'bin/vitasync.exe'
+}
 if (-not (Test-Path -LiteralPath $executable)) {
     $executable = Join-Path $buildPath 'desktop/vitasync.exe'
 }
@@ -27,12 +36,13 @@ if (-not $projectVersion) { throw 'Project version could not be read.' }
 $releaseVersion = $projectVersion -replace '\.0$', ''
 $stem = "VitaSync-$releaseVersion-Windows-x64"
 $setupPath = Join-Path $outputPath "$stem-Setup.exe"
-$zipPath = Join-Path $outputPath "$stem-Portable.zip"
-foreach ($artifact in @($setupPath, $zipPath)) {
+$rarArchivePath = Join-Path $outputPath "$stem-Portable.rar"
+foreach ($artifact in @($setupPath, $rarArchivePath)) {
     if (Test-Path -LiteralPath $artifact) { throw "Release artifact already exists: $artifact" }
 }
 
 New-Item -ItemType Directory -Path $bundlePath -Force | Out-Null
+New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
 $originalPath = $env:PATH
 try {
     $env:PATH = "$qtPath\bin;$compilerPath\bin;$originalPath"
@@ -63,9 +73,9 @@ Qml2Imports=qml
     New-Item -ItemType Directory -Path $licenseDir -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'THIRD_PARTY_NOTICES.txt') -Destination $licenseDir
     foreach ($license in @('LGPL-3.0-only.txt', 'GPL-3.0-only.txt', 'Qt-GPL-exception-1.0.txt')) {
-        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/qt/qtbase/v6.8.3/LICENSES/$license" `
-            -OutFile (Join-Path $licenseDir $license)
+        Copy-Item -LiteralPath (Join-Path $projectDir "assets/licenses/qt/$license") -Destination $licenseDir
     }
+    Copy-Item -LiteralPath (Join-Path $projectDir 'assets/icons/LUCIDE-LICENSE.txt') -Destination $licenseDir
     foreach ($component in @('gcc', 'winpthreads', 'mingw-w64', 'zlib')) {
         $componentLicenses = Join-Path $compilerPath "licenses/$component"
         if (Test-Path -LiteralPath $componentLicenses) {
@@ -78,8 +88,16 @@ Qml2Imports=qml
     & $nsisPath /V2 "/DSOURCE_DIR=$bundlePath" "/DOUT_FILE=$setupPath" `
         "/DAPP_VERSION=$projectVersion" (Join-Path $PSScriptRoot 'windows_installer.nsi')
     if ($LASTEXITCODE -ne 0) { throw 'NSIS compilation failed.' }
-    Compress-Archive -LiteralPath $bundlePath -DestinationPath $zipPath -CompressionLevel Optimal
-    $checksums = foreach ($artifact in @($setupPath, $zipPath, (Join-Path $outputPath 'RELEASE_NOTES.txt'))) {
+    Push-Location $stagingPath
+    try {
+        & $rarPath a -r -m5 -idq $rarArchivePath 'VitaSync'
+        if ($LASTEXITCODE -ne 0) { throw 'RAR packaging failed.' }
+    } finally {
+        Pop-Location
+    }
+    & $rarPath t -idq $rarArchivePath
+    if ($LASTEXITCODE -ne 0) { throw 'RAR verification failed.' }
+    $checksums = foreach ($artifact in @($setupPath, $rarArchivePath, (Join-Path $outputPath 'RELEASE_NOTES.txt'))) {
         $hash = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
         "$hash  $(Split-Path -Leaf $artifact)"
     }

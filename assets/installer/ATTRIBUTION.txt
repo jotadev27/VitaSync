@@ -1,0 +1,10 @@
+PlayStation Vita illustration
+Author: Tokyoship, Wikimedia Commons
+Source: https://commons.wikimedia.org/wiki/File:PlayStation_Vita_illustration.svg
+License: CC BY 3.0, https://creativecommons.org/licenses/by/3.0/
+
+The user supplied vita.svg from this public illustration. Its editor document
+name was changed to English. tools/render_installer_art.cpp composes the illustration
+at its original aspect ratio with the wizard.svg layout and VitaSync branding;
+wizard.bmp is the rendered installer asset.
+No endorsement by the illustrator or Sony is implied.

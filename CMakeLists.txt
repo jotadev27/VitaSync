@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(VitaSync
-    VERSION 2.0.0
+    VERSION 3.0.0
     DESCRIPTION "Local-network companion suite for a jailbroken PS Vita"
     LANGUAGES CXX)
 

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="114" viewBox="0 0 300 114">
+  <rect width="300" height="114" fill="#ffffff"/>
+  <rect x="10" y="25" width="64" height="64" rx="14" fill="#29343e"/>
+  <rect x="17" y="45" width="50" height="28" rx="10" fill="none" stroke="#e9edef" stroke-width="3"/>
+  <rect x="32" y="50" width="20" height="17" rx="2" fill="#9ab7cd"/>
+  <path d="M22 57h7m-3.5-3.5v7" stroke="#e9edef" stroke-width="2.5" stroke-linecap="round"/>
+  <g fill="#e9edef"><circle cx="58" cy="56" r="1.8"/><circle cx="61" cy="61" r="1.8"/></g>
+  <text x="90" y="68" font-family="Segoe UI, sans-serif" font-size="32" font-weight="600" fill="#20252d">VitaSync</text>
+</svg>

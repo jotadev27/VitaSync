@@ -10,7 +10,7 @@ compile_commands.json
 *.obj
 
 # Release artifacts and portable bundles -- built by tools/, not source
-installer/
+/installer/
 dist/
 *.AppImage
 *.zip
