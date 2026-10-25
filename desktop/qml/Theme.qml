@@ -1,35 +1,37 @@
 pragma Singleton
 import QtQuick
+import VitaSync
 
 QtObject {
     id: theme
-    readonly property color base:       "#191A1C"
-    readonly property color surface:    "#202123"
-    readonly property color surfaceAlt: "#292A2D"
-    readonly property color raised:     "#323438"
-    readonly property color line:       "#333538"
-    readonly property color lineStrong: "#4A4D52"
-    readonly property color ink:        "#EEEEED"
-    readonly property color inkMuted:   "#AFB1B5"
-    readonly property color inkFaint:   "#898D93"
+    readonly property bool dark: Device.darkMode
+    readonly property color base:       dark ? "#0B1422" : "#FFFFFF"
+    readonly property color surface:    dark ? "#111F32" : "#F7F8FA"
+    readonly property color surfaceAlt: dark ? "#172B43" : "#EEF0F3"
+    readonly property color raised:     dark ? "#203C59" : "#E5E8ED"
+    readonly property color line:       dark ? "#233C55" : "#E1E4E9"
+    readonly property color lineStrong: dark ? "#45647F" : "#A4ACB8"
+    readonly property color ink:        dark ? "#F5F9FF" : "#20252D"
+    readonly property color inkMuted:   dark ? "#BCCDDD" : "#505966"
+    readonly property color inkFaint:   dark ? "#94ACC1" : "#657080"
+    readonly property color scrim:      dark ? "#000000" : "#20252D"
 
-    // Restrained blue for actions; status colours only carry feedback.
-    readonly property color blue:       "#9AB7CD"
-    readonly property color blueDim:    "#49677F"
-    readonly property color blueWash:   "#26313B"
-    readonly property color green:      "#99B6A2"
-    readonly property color greenDim:   "#5E7967"
-    readonly property color greenWash:  "#27322C"
-    // Existing warning token, now a muted amber instead of purple.
-    readonly property color purple:     "#D0AA91"
-    readonly property color purpleDim:  "#876956"
-    readonly property color purpleWash: "#382C27"
-    readonly property color primaryFill: "#49677F"
+    // PlayStation blue carries selection and actions. Other hues are feedback.
+    readonly property color blue:       dark ? "#59B8FF" : "#0066B8"
+    readonly property color blueDim:    dark ? "#176DAC" : "#DCEBFA"
+    readonly property color blueWash:   dark ? "#123657" : "#EDF4FB"
+    readonly property color green:      dark ? "#83D98C" : "#28723B"
+    readonly property color greenDim:   dark ? "#35763D" : "#286C36"
+    readonly property color greenWash:  dark ? "#183722" : "#EAF5ED"
+    readonly property color purple:     dark ? "#FFBD69" : "#925000"
+    readonly property color purpleDim:  dark ? "#81501D" : "#925000"
+    readonly property color purpleWash: dark ? "#3B2B18" : "#FFF3DF"
+    readonly property color primaryFill: "#0070D1"
     readonly property color primaryInk: "#FFFFFF"
     readonly property int controlHeight: 40
     readonly property int rowHeight:     44
-    readonly property int railWidth:     216
-    readonly property int labelHeight:   22
+    readonly property int railWidth:     208
+    readonly property int labelHeight:   24
     readonly property int radius:        6
     readonly property int border:        1
     readonly property int space1: 4
@@ -42,11 +44,11 @@ QtObject {
     readonly property int pad:      16
     readonly property string sansFamily: Qt.platform.os === "windows" ? "Segoe UI" : "Noto Sans"
     readonly property string monoFamily: Qt.platform.os === "windows" ? "Consolas" : "DejaVu Sans Mono"
-    readonly property int sizeDisplay: 26
+    readonly property int sizeDisplay: 24
     readonly property int sizeTitle:   18
     readonly property int sizeBody:    14
-    readonly property int sizeSmall:   12
-    readonly property int sizeMicro:   11
+    readonly property int sizeSmall:   13
+    readonly property int sizeMicro:   12
     readonly property int fast:   110
     readonly property int normal: 180
 

@@ -12,8 +12,11 @@
 #include <vsp/VitaDevice.h>
 
 #include <Thumbnailer.h>
+#include "SvgIcon.h"
+#include "FileTypeImages.h"
 
 #include <QCommandLineParser>
+#include <QDir>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>
@@ -40,6 +43,10 @@ int main(int argc, char *argv[])
     // Basic style: every control in this app is drawn by hand, so the built-in
     // styling never gets a chance to impose its own look.
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+#ifdef Q_OS_WIN
+    // Native hinting keeps small labels crisp at Windows display scaling.
+    QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);
+#endif
 
     // Headless capture, for documentation and for checking the layout in CI
     // without a display attached. Off unless asked for.
@@ -107,6 +114,7 @@ int main(int argc, char *argv[])
     qmlRegisterUncreatableType<vsp::RemoteBrowserModel>(
         "VitaSync", 1, 0, "RemoteBrowserModel",
         QStringLiteral("Provided by Device.browser"));
+    qmlRegisterType<SvgIcon>("VitaSync", 1, 0, "SvgIcon");
     qmlRegisterUncreatableType<vsp::TransferQueue>(
         "VitaSync", 1, 0, "TransferQueue",
         QStringLiteral("Provided by Device.transfers"));
@@ -125,7 +133,9 @@ int main(int argc, char *argv[])
     // decoded video frame, or a plate drawn from a theme's own colours. All of
     // it local, all of it from the file that was dropped.
     auto *thumbnailer = new vsp::Thumbnailer(
-        QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+        (QStandardPaths::isTestModeEnabled()
+             ? QDir::tempPath() + QStringLiteral("/vitasync-test/cache")
+             : QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
             + QStringLiteral("/thumbnails"),
         &app);
     device->drops()->setThumbnailProvider(thumbnailer);
@@ -144,6 +154,7 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("VitaSync", 1, 0, "Device", device);
 
     QQmlApplicationEngine engine;
+    engine.addImageProvider(QStringLiteral("filetypes"), new FileTypeImages);
     // Staging files opens the Install screen, since that is what the user just
     // asked to look at -- unless they named a screen explicitly, in which case
     // the flag they typed wins.

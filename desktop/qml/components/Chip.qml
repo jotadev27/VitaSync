@@ -15,6 +15,12 @@ Item {
 
     implicitHeight: 26
     implicitWidth: row.implicitWidth + 20
+    activeFocusOnTab: interactive
+    Accessible.role: interactive ? Accessible.Button : Accessible.StaticText
+    Accessible.name: text
+    Accessible.onPressAction: if (interactive && enabled) root.clicked()
+    Keys.onSpacePressed: if (interactive && enabled) root.clicked()
+    Keys.onReturnPressed: if (interactive && enabled) root.clicked()
 
     Rectangle {
         anchors.fill: parent
@@ -22,7 +28,7 @@ Item {
         color: root.selected ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.13)
                              : (hover.hovered && root.interactive ? Theme.surfaceAlt : "transparent")
         border.width: Theme.border
-        border.color: root.selected ? root.accent
+        border.color: root.activeFocus ? Theme.blue : root.selected ? root.accent
                                     : (hover.hovered && root.interactive ? Theme.lineStrong : Theme.line)
 
         Behavior on color { ColorAnimation { duration: Theme.fast } }

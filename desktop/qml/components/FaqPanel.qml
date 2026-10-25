@@ -9,6 +9,13 @@ Item {
     id: root
 
     property bool open: false
+    signal collapseQuestions()
+    onOpenChanged: {
+        if (!open) {
+            collapseQuestions()
+            list.positionViewAtBeginning()
+        }
+    }
 
     anchors.fill: parent
     visible: open || scrim.opacity > 0
@@ -16,27 +23,30 @@ Item {
     Rectangle {
         id: scrim
         anchors.fill: parent
-        color: Theme.base
-        opacity: root.open ? 0.72 : 0
-        Behavior on opacity { NumberAnimation { duration: Theme.normal } }
+        color: Theme.scrim
+        opacity: root.open ? 0.28 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.fast } }
 
         // Only the header's close button dismisses the panel. The scrim
         // still has to swallow taps -- otherwise they would fall through to
         // whatever screen sits behind this modal overlay -- it just must not
         // treat one as a request to close.
-        TapHandler {}
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            hoverEnabled: true
+            onWheel: function(wheel) { wheel.accepted = true }
+        }
     }
 
     Rectangle {
         id: panel
-        anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: Math.min(430, root.width)
         color: Theme.surface
-        x: root.open ? 0 : width
-
-        Behavior on x { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
+        x: root.width - width
+        visible: root.open
 
         Rectangle {
             anchors.left: parent.left
@@ -59,18 +69,17 @@ Item {
                 Icon {
                     anchors.verticalCenter: parent.verticalCenter
                     name: "bulb"
-                    size: 17
+                    size: 18
                     color: Theme.blue
                 }
 
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "QUESTIONS"
+                    text: "VitaShell help"
                     font.family: Theme.sansFamily
-                    font.pixelSize: Theme.sizeMicro
-                    font.weight: Font.Bold
-                    font.letterSpacing: 1.6
-                    color: Theme.blue
+                    font.pixelSize: Theme.sizeTitle
+                    font.weight: Font.Medium
+                    color: Theme.ink
                 }
             }
 
@@ -80,6 +89,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 variant: "quiet"
                 iconName: "close"
+                accessibleName: "Close VitaShell help"
                 onClicked: root.open = false
             }
 
@@ -173,10 +183,15 @@ Item {
             }
 
             delegate: Item {
+                id: questionRow
                 width: list.width
                 height: column.implicitHeight + 18
 
                 property bool expanded: false
+                Connections {
+                    target: root
+                    function onCollapseQuestions() { questionRow.expanded = false }
+                }
 
                 Column {
                     id: column
@@ -194,7 +209,6 @@ Item {
                             size: 12
                             color: expanded ? Theme.blue : Theme.inkFaint
                             rotation: expanded ? 90 : 0
-                            Behavior on rotation { NumberAnimation { duration: Theme.fast } }
                         }
 
                         Text {
@@ -205,7 +219,6 @@ Item {
                             font.weight: Font.Medium
                             color: expanded ? Theme.blue : Theme.ink
                             wrapMode: Text.WordWrap
-                            Behavior on color { ColorAnimation { duration: Theme.fast } }
                         }
                     }
 
@@ -229,7 +242,10 @@ Item {
                     color: Theme.line
                 }
 
-                TapHandler { onTapped: expanded = !expanded }
+                TapHandler {
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onTapped: expanded = !expanded
+                }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
             }
         }
@@ -251,8 +267,9 @@ Item {
                 anchors.left: parent.left
                 anchors.leftMargin: Theme.gapLarge
                 anchors.verticalCenter: parent.verticalCenter
-                text: "VitaSync " + Device.appVersion + "  ·  " + Device.metadata.titleCount + " titles offline"
-                font.family: Theme.monoFamily
+                text: "VitaSync " + Device.appVersion.replace(/\.0$/, "") + " · Offline game catalog: "
+                    + Number(Device.metadata.titleCount).toLocaleString(Qt.locale("en_US"), "f", 0) + " titles"
+                font.family: Theme.sansFamily
                 font.pixelSize: Theme.sizeMicro
                 color: Theme.inkFaint
             }

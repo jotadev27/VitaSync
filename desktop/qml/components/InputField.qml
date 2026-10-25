@@ -90,6 +90,7 @@ Item {
 
         TextInput {
             id: field
+            Accessible.name: root.label.length > 0 ? root.label : root.placeholder
             anchors.fill: parent
             anchors.leftMargin: Theme.pad
             anchors.rightMargin: Theme.pad

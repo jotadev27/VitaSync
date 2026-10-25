@@ -79,6 +79,8 @@ mock-card/
 *.png
 !/assets/logo/*.png
 !/docs/images/*.png
+!/assets/filetypes/music.png
+!/assets/filetypes/video.png
 *.jpg
 *.jpeg
 *.webp

@@ -3,6 +3,8 @@
 
 qt_add_executable(vitasync
     main.cpp
+    SvgIcon.h SvgIcon.cpp
+    FileTypeImages.h FileTypeImages.cpp
     # Windows only: embeds the app icon in the .exe itself. MinGW compiles it
     # with windres; every other platform ignores the file entirely.
     $<$<BOOL:${WIN32}>:vitasync.rc>
@@ -30,6 +32,10 @@ set_source_files_properties(../assets/logo/system.svg
     PROPERTIES QT_RESOURCE_ALIAS brand/system.svg)
 set_source_files_properties(../assets/logo/vitasync.ico
     PROPERTIES QT_RESOURCE_ALIAS brand/vitasync.ico)
+set_source_files_properties(../assets/filetypes/music.png
+    PROPERTIES QT_RESOURCE_ALIAS filetypes/music.png)
+set_source_files_properties(../assets/filetypes/video.png
+    PROPERTIES QT_RESOURCE_ALIAS filetypes/video.png)
 
 # This module keeps its .qml files in components/ and views/ rather than one
 # flat directory. Qt 6.9 added a policy for exactly that shape: NEW generates
@@ -47,7 +53,9 @@ qt_add_qml_module(vitasync
         qml/Main.qml
         qml/Theme.qml
         qml/components/Icon.qml
+        qml/components/LucideIcons.js
         qml/components/AppButton.qml
+        qml/components/TransferRow.qml
         qml/components/InputField.qml
         qml/components/SectionLabel.qml
         qml/components/StatusDot.qml
@@ -72,10 +80,15 @@ qt_add_qml_module(vitasync
         ../assets/logo/appicon_32.png
         ../assets/logo/system.svg
         ../assets/logo/vitasync.ico
+        ../assets/filetypes/music.png
+        ../assets/filetypes/video.png
 )
 
 
 target_link_libraries(vitasync PRIVATE vsp_core vsp_media Qt6::Quick Qt6::QuickControls2 Qt6::Svg)
+if(WIN32)
+    target_link_libraries(vitasync PRIVATE shell32 comctl32 ole32 uuid)
+endif()
 
 set_target_properties(vitasync PROPERTIES
     WIN32_EXECUTABLE TRUE
@@ -121,3 +134,5 @@ add_custom_command(TARGET vitasync POST_BUILD
 install(TARGETS vitasync RUNTIME DESTINATION bin)
 install(FILES ${CMAKE_SOURCE_DIR}/assets/covers/titles.json
         DESTINATION share/vitasync/assets/covers)
+install(FILES ${CMAKE_SOURCE_DIR}/assets/icons/LUCIDE-LICENSE.txt
+        DESTINATION share/vitasync/licenses)

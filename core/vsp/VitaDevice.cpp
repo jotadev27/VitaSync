@@ -63,7 +63,9 @@ VitaDevice::VitaDevice(QObject *parent, UsbDetector usbDetector)
     , m_drops(new DropStageModel(this))
     , m_metadata(new MetadataDb(this))
     , m_settings(new QSettings(
-          QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+          (QStandardPaths::isTestModeEnabled()
+               ? QDir::tempPath() + QStringLiteral("/vitasync-test")
+               : QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation))
               + QStringLiteral("/settings.ini"), QSettings::IniFormat, this))
     , m_reconnect(new QTimer(this))
     , m_keepAlive(new QTimer(this))
@@ -249,6 +251,7 @@ QString VitaDevice::appVersion() const
 
 void VitaDevice::loadSettings()
 {
+    m_darkMode = m_settings->value(QStringLiteral("appearance/darkMode"), false).toBool();
     // Preserve preferences from earlier releases that used the platform's
     // native QSettings store (the registry on Windows). Tests stay isolated.
     if (!QFileInfo::exists(m_settings->fileName()) && !QStandardPaths::isTestModeEnabled()) {
@@ -333,6 +336,16 @@ void VitaDevice::saveSettings()
 }
 
 // --- connection -----------------------------------------------------------
+
+void VitaDevice::setDarkMode(bool enabled)
+{
+    if (m_darkMode == enabled)
+        return;
+    m_darkMode = enabled;
+    m_settings->setValue(QStringLiteral("appearance/darkMode"), enabled);
+    m_settings->sync();
+    emit appearanceChanged();
+}
 
 void VitaDevice::setHost(const QString &host)
 {

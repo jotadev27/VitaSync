@@ -63,7 +63,24 @@ Rectangle {
                 width: parent.width
                 height: 44
                 radius: Theme.radius
-                color: active ? Theme.raised : (hover.hovered ? Theme.surfaceAlt : "transparent")
+                color: active ? Theme.blueWash : (hover.hovered ? Theme.surfaceAlt : "transparent")
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
+                Accessible.name: modelData.label
+                Accessible.onPressAction: root.navigate(index)
+                Keys.onSpacePressed: root.navigate(index)
+                Keys.onReturnPressed: root.navigate(index)
+                border.width: activeFocus ? 1 : 0
+                border.color: Theme.blue
+                Rectangle {
+                    x: 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 3
+                    height: 18
+                    radius: 1
+                    visible: entry.active
+                    color: Theme.blue
+                }
                 Row {
                     anchors.left: parent.left
                     anchors.leftMargin: 14
@@ -71,8 +88,8 @@ Rectangle {
                     spacing: 12
                     Icon {
                         name: modelData.icon
-                        size: 19
-                        color: entry.active ? Theme.ink : Theme.inkMuted
+                        size: 20
+                        color: entry.active ? Theme.blue : Theme.inkMuted
                         anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {

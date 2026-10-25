@@ -8,6 +8,15 @@ import "../components"
 Item {
     id: root
     property bool manualUsb: false
+    property bool rescanFeedback: false
+    Timer {
+        id: rescanFeedbackTimer
+        interval: 900
+        onTriggered: {
+            if (Device.usbScanning) restart()
+            else root.rescanFeedback = false
+        }
+    }
     Connections {
         target: Device
         function onConnectionInfoChanged() {
@@ -23,15 +32,15 @@ Item {
     ScrollView {
         id: scroll
         anchors.fill: parent
-        padding: 32
+        padding: 24
         clip: true
         contentWidth: availableWidth
         contentHeight: layout.implicitHeight
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         Column {
             id: layout
-            width: Math.min(scroll.availableWidth, 820)
-            spacing: 28
+            width: Math.min(scroll.availableWidth, 760)
+            spacing: 24
             Column {
                 width: parent.width
                 spacing: 8
@@ -40,7 +49,7 @@ Item {
                     color: Theme.ink
                     font.family: Theme.sansFamily
                     font.pixelSize: Theme.sizeDisplay
-                    font.weight: Font.DemiBold
+                    font.weight: Font.Medium
                 }
                 Text {
                     width: parent.width
@@ -53,35 +62,98 @@ Item {
             }
             Rectangle {
                 width: parent.width
-                height: connection.implicitHeight + 48
+                height: connection.implicitHeight + 40
                 color: Theme.surface
                 radius: 10
                 border.color: Theme.line
+                clip: true
                 Column {
                     id: connection
-                    x: 24
-                    y: 24
-                    width: parent.width - 48
-                    spacing: 24
-                    Row {
-                        spacing: 8
-                        AppButton {
-                            text: "Wi-Fi / FTP"
-                            iconName: "wifi"
-                            accent: Theme.inkMuted
-                            variant: Device.connectionMode === "ftp" ? "primary" : "quiet"
-                            onClicked: Device.connectionMode = "ftp"
+                    x: 20
+                    y: 20
+                    width: parent.width - 40
+                    spacing: 20
+                    Rectangle {
+                        id: modeSelector
+                        width: Math.min(parent.width, 320)
+                        height: 46
+                        radius: 8
+                        color: Theme.base
+                        border.color: Theme.line
+                        Rectangle {
+                            x: 4 + (Device.connectionMode === "usb" ? (parent.width - 8) / 2 : 0)
+                            y: 4
+                            width: (parent.width - 8) / 2
+                            height: parent.height - 8
+                            radius: 5
+                            color: Theme.primaryFill
+                            Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                         }
-                        AppButton {
-                            text: "USB cable"
-                            iconName: "usb"
-                            accent: Theme.inkMuted
-                            variant: Device.connectionMode === "usb" ? "primary" : "quiet"
-                            onClicked: Device.connectionMode = "usb"
+                        Row {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            Repeater {
+                                model: [{mode: "ftp", title: "Wi-Fi / FTP", icon: "wifi"},
+                                        {mode: "usb", title: "USB cable", icon: "usb"}]
+                                Item {
+                                    id: modeOption
+                                    width: (modeSelector.width - 8) / 2
+                                    height: modeSelector.height - 8
+                                    activeFocusOnTab: true
+                                    Accessible.role: Accessible.RadioButton
+                                    Accessible.name: modelData.title
+                                    Accessible.checkable: true
+                                    Accessible.checked: Device.connectionMode === modelData.mode
+                                    Accessible.onPressAction: Device.connectionMode = modelData.mode
+                                    Keys.onSpacePressed: Device.connectionMode = modelData.mode
+                                    Keys.onReturnPressed: Device.connectionMode = modelData.mode
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 5
+                                        color: "transparent"
+                                        border.width: parent.activeFocus ? 2 : 0
+                                        border.color: Theme.blue
+                                    }
+                                    Row {
+                                        anchors.centerIn: parent
+                                        spacing: 9
+                                        Icon {
+                                            name: modelData.icon
+                                            size: 18
+                                            color: Device.connectionMode === modelData.mode ? Theme.primaryInk : Theme.inkMuted
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                        Text {
+                                            text: modelData.title
+                                            font.family: Theme.sansFamily
+                                            font.pixelSize: Theme.sizeBody
+                                            font.weight: Font.Medium
+                                            color: Device.connectionMode === modelData.mode ? Theme.primaryInk : Theme.inkMuted
+                                        }
+                                    }
+                                    TapHandler {
+                                        onTapped: {
+                                            modeOption.forceActiveFocus(Qt.MouseFocusReason)
+                                            Device.connectionMode = modelData.mode
+                                        }
+                                    }
+                                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                                }
+                            }
                         }
                     }
+                    Item {
+                        id: modeContent
+                        width: parent.width
+                        height: Device.connectionMode === "ftp" ? ftpPanel.implicitHeight : usbPanel.implicitHeight
+                        clip: true
+                        Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                     Column {
-                        visible: Device.connectionMode === "ftp"
+                        id: ftpPanel
+                        opacity: Device.connectionMode === "ftp" ? 1 : 0
+                        visible: opacity > 0
+                        enabled: Device.connectionMode === "ftp"
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
                         width: parent.width
                         spacing: 18
                         Text {
@@ -174,7 +246,11 @@ Item {
                         }
                     }
                     Column {
-                        visible: Device.connectionMode === "usb"
+                        id: usbPanel
+                        opacity: Device.connectionMode === "usb" ? 1 : 0
+                        visible: opacity > 0
+                        enabled: Device.connectionMode === "usb"
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
                         width: parent.width
                         spacing: 16
                         Row {
@@ -200,7 +276,7 @@ Item {
                                 }
                                 Text {
                                     width: parent.width
-                                    text: "With USB selected in VitaShell, press SELECT. Your drive will appear here automatically."
+                                    text: "Open VitaShell in USB mode and press SELECT."
                                     color: Theme.inkMuted
                                     font.family: Theme.sansFamily
                                     font.pixelSize: Theme.sizeSmall
@@ -260,7 +336,7 @@ Item {
                         Text {
                             width: parent.width
                             visible: Device.usbCandidates.length === 0 && !Device.connected
-                            text: "If the drive also fails to appear in your file explorer, check the USB cable and the USB device selected in VitaShell."
+                            text: "No drive yet? Check the cable and USB storage selected in VitaShell."
                             color: Theme.inkFaint
                             font.family: Theme.sansFamily
                             font.pixelSize: Theme.sizeSmall
@@ -275,11 +351,13 @@ Item {
                                 onClicked: Device.connected ? Device.disconnectFromVita() : Device.connectUsb()
                             }
                             AppButton {
-                                text: "Rescan"
+                                text: root.rescanFeedback ? "Scanning…" : "Rescan"
                                 iconName: "refresh"
-                                busy: Device.usbScanning
-                                enabled: !Device.usbScanning && !Device.connected
-                                onClicked: Device.refreshUsbCandidates()
+                                width: 128
+                                busy: root.rescanFeedback
+                                spinIcon: true
+                                enabled: !root.rescanFeedback && !Device.connected
+                                onClicked: { root.rescanFeedback = true; rescanFeedbackTimer.restart(); Device.refreshUsbCandidates() }
                             }
                             AppButton {
                                 text: root.manualUsb ? "Hide manual selection" : "Select drive manually"
@@ -309,6 +387,7 @@ Item {
                                 onClicked: usbDialog.open()
                             }
                         }
+                    }
                     }
                     Column {
                         visible: Device.connected
@@ -351,6 +430,7 @@ Item {
                     spacing: 12
                     InputField {
                         id: downloadField
+                        mono: false
                         width: parent.width - downloadBrowse.width - 12
                         label: "Save files downloaded from your Vita"
                         text: Device.downloadDirDisplay
@@ -369,6 +449,7 @@ Item {
                     spacing: 12
                     InputField {
                         id: coverField
+                        mono: false
                         width: parent.width - coverBrowse.width - 12
                         label: "Cover artwork (optional)"
                         placeholder: "Folder containing TITLEID.png images"

@@ -69,6 +69,7 @@ class VitaDevice : public QObject
     Q_PROPERTY(QString coverPackPath READ coverPackPath WRITE setCoverPackPath NOTIFY settingsChanged)
     Q_PROPERTY(QString coverPackPathDisplay READ coverPackPathDisplay NOTIFY settingsChanged)
     Q_PROPERTY(bool keepAwake READ keepAwake WRITE setKeepAwake NOTIFY settingsChanged)
+    Q_PROPERTY(bool darkMode READ darkMode WRITE setDarkMode NOTIFY appearanceChanged)
 
     Q_PROPERTY(QStringList log READ log NOTIFY logChanged)
     Q_PROPERTY(QString appVersion READ appVersion CONSTANT)
@@ -79,6 +80,8 @@ class VitaDevice : public QObject
     Q_PROPERTY(vsp::MetadataDb *metadata READ metadata CONSTANT)
 
 public:
+    bool darkMode() const { return m_darkMode; }
+    void setDarkMode(bool enabled);
     using UsbDetector = std::function<QVector<UsbTransport::Candidate>()>;
     explicit VitaDevice(QObject *parent = nullptr, UsbDetector usbDetector = {});
     ~VitaDevice() override;
@@ -186,6 +189,7 @@ signals:
     void statusChanged();
     void locationChanged();
     void settingsChanged();
+    void appearanceChanged();
     void logChanged();
     /// Each line as it is appended, for mirroring the trace to a terminal.
     void logLineAdded(const QString &line);
@@ -270,6 +274,7 @@ private:
 
     QString m_downloadDir;
     bool m_keepAwake = true;
+    bool m_darkMode = false;
 
     QStringList m_log;
     bool m_userWantsConnection = false;

@@ -47,6 +47,7 @@ Window {
     Row {
         anchors.fill: parent
         spacing: 0
+        enabled: !faq.visible
 
         NavRail {
             id: rail
@@ -93,6 +94,8 @@ Window {
                     anchors.fill: parent
                     visible: window.currentIndex === 1
                     enabled: visible
+                    dragActive: globalDrop.containsDrag
+                    onConnectionRequested: window.currentIndex = 0
                 }
 
                 BrowseView {
@@ -182,10 +185,56 @@ Window {
         anchors.fill: parent
     }
 
+    DropArea {
+        id: globalDrop
+        anchors.fill: parent
+        z: 100
+        enabled: !faq.visible
+        onEntered: function (drag) { drag.accepted = drag.hasUrls }
+        onDropped: function (drop) {
+            if (!drop.hasUrls) { drop.accepted = false; return }
+            var paths = []
+            for (var i = 0; i < drop.urls.length; ++i)
+                paths.push(drop.urls[i].toString())
+            var added = Device.addDrops(paths)
+            if (added > 0) window.currentIndex = 1
+            drop.acceptProposedAction()
+        }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 6
+            visible: globalDrop.containsDrag
+            color: Qt.rgba(Theme.base.r, Theme.base.g, Theme.base.b, 0.92)
+            radius: 8
+            border.width: 2
+            border.color: Theme.blue
+            Column {
+                anchors.centerIn: parent
+                spacing: 16
+                Icon { anchors.horizontalCenter: parent.horizontalCenter; name: "upload"; size: 40; color: Theme.blue }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Release to add files"
+                    font.family: Theme.sansFamily
+                    font.pixelSize: Theme.sizeDisplay
+                    font.weight: Font.DemiBold
+                    color: Theme.ink
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Review the list before anything is sent"
+                    font.family: Theme.sansFamily
+                    font.pixelSize: Theme.sizeBody
+                    color: Theme.inkMuted
+                }
+            }
+        }
+    }
+
     // Keyboard: the shortcuts a file manager is expected to have.
-    Shortcut { sequence: "Ctrl+A"; onActivated: if (window.currentIndex === 2) Device.browser.selectAll() }
+    Shortcut { sequence: "Ctrl+A"; enabled: !faq.visible; onActivated: if (window.currentIndex === 2) Device.browser.selectAll() }
     Shortcut { sequence: "Escape"; onActivated: { if (faq.open) faq.open = false; else Device.browser.clearSelection() } }
-    Shortcut { sequence: "F5"; onActivated: Device.refresh() }
-    Shortcut { sequence: "Ctrl+L"; onActivated: window.currentIndex = 0 }
+    Shortcut { sequence: "F5"; enabled: !faq.visible; onActivated: Device.refresh() }
+    Shortcut { sequence: "Ctrl+L"; enabled: !faq.visible; onActivated: window.currentIndex = 0 }
     Shortcut { sequence: "F1"; onActivated: faq.open = !faq.open }
 }

@@ -13,7 +13,10 @@ Item {
     property string variant: "secondary"     // primary | secondary | quiet
     property color accent: Theme.blue
     property bool busy: false
+    property bool spinIcon: false
     property bool dangerous: false
+    readonly property bool hovered: hover.hovered
+    property string accessibleName: text.length > 0 ? text : iconName
 
     signal clicked()
 
@@ -21,11 +24,18 @@ Item {
     readonly property bool isPrimary: variant === "primary"
     readonly property bool isQuiet: variant === "quiet"
     readonly property color fill: dangerous ? Theme.purpleDim
-        : (accent === Theme.blue ? Theme.primaryFill : Qt.darker(effectiveAccent, 1.45))
+        : (accent === Theme.blue ? Theme.primaryFill
+           : (accent === Theme.inkMuted ? Theme.raised : Qt.darker(effectiveAccent, 1.7)))
 
     implicitHeight: Theme.controlHeight
     implicitWidth: content.implicitWidth + (isQuiet ? 18 : 30)
-    opacity: enabled ? 1 : 0.42
+    activeFocusOnTab: true
+    Accessible.role: Accessible.Button
+    Accessible.name: accessibleName
+    Accessible.onPressAction: if (enabled) root.clicked()
+    Keys.onSpacePressed: if (enabled) root.clicked()
+    Keys.onReturnPressed: if (enabled) root.clicked()
+    opacity: enabled || busy ? 1 : 0.42
 
     Rectangle {
         id: plate
@@ -38,10 +48,10 @@ Item {
                 return hover.hovered ? Theme.surfaceAlt : "transparent"
             return hover.hovered ? Theme.surfaceAlt : Theme.surface
         }
-        border.width: root.isPrimary || root.isQuiet ? 0 : Theme.border
-        border.color: hover.hovered ? Theme.inkMuted : Theme.lineStrong
+        border.width: root.activeFocus ? 2 : (root.isPrimary || root.isQuiet ? 0 : Theme.border)
+        border.color: root.activeFocus ? Theme.blue : (hover.hovered ? Theme.inkMuted : Theme.lineStrong)
+        scale: press.pressed ? 0.98 : 1
 
-        Behavior on color { ColorAnimation { duration: Theme.fast } }
         Behavior on border.color { ColorAnimation { duration: Theme.fast } }
     }
 
@@ -51,15 +61,22 @@ Item {
         spacing: root.text.length > 0 && root.iconName.length > 0 ? 8 : 0
 
         Icon {
+            id: buttonIcon
             visible: root.iconName.length > 0
             name: root.iconName
-            size: 16
+            size: 18
             anchors.verticalCenter: parent.verticalCenter
-            // On a filled button the label sits on the accent, so the mark has
-            // to flip to the dark plane to stay readable.
+            // Filled controls use the same white label and icon.
             color: root.isPrimary ? Theme.primaryInk
                                   : (hover.hovered ? root.effectiveAccent : Theme.inkMuted)
-            Behavior on color { ColorAnimation { duration: Theme.fast } }
+            RotationAnimation on rotation {
+                running: root.spinIcon && root.busy
+                from: 0
+                to: 360
+                duration: 800
+                loops: Animation.Infinite
+                onStopped: buttonIcon.rotation = 0
+            }
         }
 
         Text {
@@ -71,7 +88,6 @@ Item {
             font.weight: root.isPrimary ? Font.DemiBold : Font.Medium
             color: root.isPrimary ? Theme.primaryInk
                                   : (hover.hovered ? Theme.ink : Theme.inkMuted)
-            Behavior on color { ColorAnimation { duration: Theme.fast } }
         }
     }
 
@@ -94,5 +110,10 @@ Item {
     }
 
     HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor; enabled: root.enabled }
-    TapHandler { enabled: root.enabled; onTapped: root.clicked() }
+    TapHandler {
+        id: press
+        enabled: root.enabled
+        gesturePolicy: TapHandler.ReleaseWithinBounds
+        onTapped: { root.forceActiveFocus(Qt.MouseFocusReason); root.clicked() }
+    }
 }
